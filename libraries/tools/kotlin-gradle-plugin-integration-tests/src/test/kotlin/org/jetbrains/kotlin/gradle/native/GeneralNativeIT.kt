@@ -7,22 +7,17 @@ package org.jetbrains.kotlin.gradle.native
 
 import com.intellij.testFramework.TestDataFile
 import org.gradle.api.logging.LogLevel
-import org.gradle.api.logging.configuration.WarningMode
 import org.gradle.util.GradleVersion
 import org.jdom.input.SAXBuilder
 import org.jetbrains.kotlin.gradle.*
-import org.jetbrains.kotlin.gradle.internals.DISABLED_NATIVE_TARGETS_REPORTER_DISABLE_WARNING_PROPERTY_NAME
-import org.jetbrains.kotlin.gradle.internals.DISABLED_NATIVE_TARGETS_REPORTER_WARNING_PREFIX
+import org.jetbrains.kotlin.gradle.internals.KOTLIN_NATIVE_IGNORE_DISABLED_TARGETS_PROPERTY
 import org.jetbrains.kotlin.gradle.plugin.diagnostics.KotlinToolingDiagnostics
 import org.jetbrains.kotlin.gradle.plugin.mpp.NativeOutputKind
 import org.jetbrains.kotlin.gradle.testbase.*
+import org.jetbrains.kotlin.gradle.testbase.TestVersions.Kotlin.STABLE_RELEASE
 import org.jetbrains.kotlin.gradle.util.modify
 import org.jetbrains.kotlin.gradle.util.runProcess
-import org.jetbrains.kotlin.gradle.utils.Xcode
-import org.jetbrains.kotlin.konan.target.CompilerOutputKind
-import org.jetbrains.kotlin.konan.target.HostManager
-import org.jetbrains.kotlin.konan.target.KonanTarget
-import org.jetbrains.kotlin.konan.target.presetName
+import org.jetbrains.kotlin.konan.target.*
 import org.junit.Assume
 import org.junit.Ignore
 import org.junit.Test
@@ -35,17 +30,18 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 internal object MPPNativeTargets {
-    val current = when {
-        HostManager.hostIsMingw -> "mingw64"
-        HostManager.hostIsLinux -> "linux64"
-        HostManager.hostIsMac -> "macos64"
-        else -> error("Unknown host")
+    val current = when (HostManager.host) {
+        KonanTarget.LINUX_X64 -> "linux64"
+        KonanTarget.MACOS_X64 -> "macos64"
+        KonanTarget.MACOS_ARM64 -> "macosArm64"
+        KonanTarget.MINGW_X64 -> "mingw64"
+        else -> error("Unsupported host")
     }
 
     val unsupported = when {
-        HostManager.hostIsMingw -> listOf("macos64")
-        HostManager.hostIsLinux -> listOf("macos64", "mingw64")
-        HostManager.hostIsMac -> listOf("linuxMipsel32")
+        HostManager.hostIsMingw -> setOf("macos64")
+        HostManager.hostIsLinux -> setOf("macos64")
+        HostManager.hostIsMac -> emptySet()
         else -> error("Unknown host")
     }
 
@@ -364,7 +360,7 @@ class GeneralNativeIT : BaseGradleIT() {
             frameworkPaths.forEach { assertFileExists(it) }
 
             assertTrue(fileInWorkingDir(headerPaths[0]).readText().contains("+ (int32_t)exported"))
-            val xcodeMajorVersion = Xcode!!.currentVersion.major
+            val xcodeMajorVersion = Xcode.findCurrent().version.major
 
             // Check that by default release frameworks have bitcode embedded.
             withNativeCommandLineArguments(":linkMainReleaseFrameworkIos") { arguments ->
@@ -803,7 +799,7 @@ class GeneralNativeIT : BaseGradleIT() {
     @Test
     fun testNativeTestGetters() = with(transformNativeTestProject("native-tests")) {
         // Check that test binaries can be accessed in a buildscript.
-        build("checkNewGetters") {
+        build("checkGetters") {
             assertSuccessful()
             val suffix = if (HostManager.hostIsMingw) "exe" else "kexe"
             val names = listOf("test", "another")
@@ -813,32 +809,6 @@ class GeneralNativeIT : BaseGradleIT() {
                 assertContains("Get test: $it")
                 assertContains("Find test: $it")
             }
-        }
-
-        // Check that accessing a test as an executable fails or returns null and shows the corresponding warning.
-        build("checkOldGet") {
-            assertFailed()
-            assertContains(
-                """
-                    |Probably you are accessing the default test binary using the 'binaries.getExecutable("test", DEBUG)' method.
-                    |Since 1.3.40 tests are represented by a separate binary type. To get the default test binary, use:
-                    |
-                    |    binaries.getTest("DEBUG")
-                """.trimMargin()
-            )
-        }
-
-        build("checkOldFind") {
-            assertSuccessful()
-            assertContains(
-                """
-                    |Probably you are accessing the default test binary using the 'binaries.findExecutable("test", DEBUG)' method.
-                    |Since 1.3.40 tests are represented by a separate binary type. To get the default test binary, use:
-                    |
-                    |    binaries.findTest("DEBUG")
-                """.trimMargin()
-            )
-            assertContains("Find test: null")
         }
     }
 
@@ -940,34 +910,21 @@ class GeneralNativeIT : BaseGradleIT() {
                 assertNoDiagnostic(KotlinToolingDiagnostics.NativeStdlibIsMissingDiagnostic)
             }
 
-            build("tasks", "-Pkotlin.native.version=1.5.20") {
+
+            val platform = HostManager.platformName()
+            val version = STABLE_RELEASE
+            val escapedRegexVersion = Regex.escape(STABLE_RELEASE)
+            build("tasks", "-Pkotlin.native.version=$version") {
                 assertSuccessful()
-                assertContainsRegex(
-                    "Kotlin/Native distribution: .*kotlin-native-prebuilt-(macos|linux|windows)-1\\.5\\.20"
-                        .toRegex()
-                )
+                assertContainsRegex("Kotlin/Native distribution: .*kotlin-native-prebuilt-$platform-$escapedRegexVersion".toRegex())
                 assertNotContains("Project property 'org.jetbrains.kotlin.native.version' is deprecated")
             }
 
             // Deprecated property
-            build("tasks", "-Porg.jetbrains.kotlin.native.version=1.5.20") {
+            build("tasks", "-Porg.jetbrains.kotlin.native.version=$version") {
                 assertSuccessful()
-                assertContainsRegex(
-                    "Kotlin/Native distribution: .*kotlin-native-prebuilt-(macos|linux|windows)-1\\.5\\.20"
-                        .toRegex()
-                )
+                assertContainsRegex("Kotlin/Native distribution: .*kotlin-native-prebuilt-$platform-$escapedRegexVersion".toRegex())
                 assertContains("Project property 'org.jetbrains.kotlin.native.version' is deprecated")
-            }
-        }
-
-        // Gradle 5.0 introduced a new API for Ivy repository layouts.
-        // MPP plugin uses this API to download K/N if Gradle version is >= 5.0.
-        // Check this too (see KT-30258).
-        with(Project("native-libraries")) {
-            build("tasks", "-Pkotlin.native.version=1.3.50") {
-                assertSuccessful()
-                assertTrue(output.contains("Kotlin/Native distribution: "))
-                assertFalse(output.contains("Deprecated Gradle features were used in this build, making it incompatible with Gradle 6.0."))
             }
         }
     }
@@ -987,11 +944,11 @@ class GeneralNativeIT : BaseGradleIT() {
         hostHaveUnsupportedTarget()
         build {
             assertSuccessful()
-            assertEquals(1, output.lines().count { DISABLED_NATIVE_TARGETS_REPORTER_WARNING_PREFIX in it })
+            assertHasDiagnostic(KotlinToolingDiagnostics.DisabledKotlinNativeTargets)
         }
-        build("-P$DISABLED_NATIVE_TARGETS_REPORTER_DISABLE_WARNING_PROPERTY_NAME=true") {
+        build("-P$KOTLIN_NATIVE_IGNORE_DISABLED_TARGETS_PROPERTY=true") {
             assertSuccessful()
-            assertNotContains(DISABLED_NATIVE_TARGETS_REPORTER_WARNING_PREFIX)
+            assertNoDiagnostic(KotlinToolingDiagnostics.DisabledKotlinNativeTargets)
         }
     }
 
@@ -1198,6 +1155,17 @@ class GeneralNativeIT : BaseGradleIT() {
         build("assemble") {
             assertSuccessful()
             assertContains("-Xverbose-phases=Linker")
+        }
+    }
+
+
+    // KT-58537
+    @Test
+    @Ignore("Requires update to the newer version with changes")
+    fun testProjectNameWithSpaces() = with(transformNativeTestProjectWithPluginDsl("native-root-project-name-with-space")) {
+        build("assemble") {
+            assertNotContains("Could not find \"Contains\" in")
+            assertSuccessful()
         }
     }
 

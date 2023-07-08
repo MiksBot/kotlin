@@ -23,6 +23,7 @@ import org.jetbrains.kotlin.ir.types.getClass
 import org.jetbrains.kotlin.ir.util.*
 import org.jetbrains.kotlin.ir.visitors.IrElementVisitorVoid
 import org.jetbrains.kotlin.ir.visitors.acceptVoid
+import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.parentOrNull
 import org.jetbrains.kotlin.wasm.ir.*
 import org.jetbrains.kotlin.wasm.ir.source.location.SourceLocation
@@ -38,6 +39,7 @@ class DeclarationGenerator(
     private val irBuiltIns: IrBuiltIns = backendContext.irBuiltIns
 
     private val unitGetInstanceFunction: IrSimpleFunction by lazy { backendContext.findUnitGetInstanceFunction() }
+    private val unitPrimaryConstructor: IrConstructor? by lazy { backendContext.irBuiltIns.unitClass.owner.primaryConstructor }
 
     override fun visitElement(element: IrElement) {
         error("Unexpected element of type ${element::class}")
@@ -98,12 +100,11 @@ class DeclarationGenerator(
         // Generate function type
         val watName = declaration.fqNameWhenAvailable.toString()
         val irParameters = declaration.getEffectiveValueParameters()
-        val resultType =
-            when {
-                // Unit_getInstance returns true Unit reference instead of "void"
-                declaration == unitGetInstanceFunction -> context.transformType(declaration.returnType)
-                else -> context.transformResultType(declaration.returnType)
-            }
+        val resultType = when (declaration) {
+            // Unit_getInstance returns true Unit reference instead of "void"
+            unitGetInstanceFunction, unitPrimaryConstructor -> context.transformType(declaration.returnType)
+            else -> context.transformResultType(declaration.returnType)
+        }
 
         val wasmFunctionType =
             WasmFunctionType(
@@ -149,7 +150,6 @@ class DeclarationGenerator(
             context = context,
             functionContext = functionCodegenContext,
             hierarchyDisjointUnions = hierarchyDisjointUnions,
-            isGetUnitFunction = declaration == unitGetInstanceFunction
         )
 
         if (declaration is IrConstructor) {
@@ -183,11 +183,16 @@ class DeclarationGenerator(
         if (initPriority != null)
             context.registerInitFunction(function, initPriority)
 
-        if (declaration.isExported()) {
+        val nameIfExported = when {
+            declaration.isJsExport() -> declaration.getJsNameOrKotlinName().identifier
+            else -> declaration.getWasmExportNameIfWasmExport()
+        }
+
+        if (nameIfExported != null) {
             context.addExport(
                 WasmExport.Function(
                     field = function,
-                    name = declaration.getJsNameOrKotlinName().identifier
+                    name = nameIfExported
                 )
             )
         }
@@ -501,8 +506,7 @@ fun IrFunction.getEffectiveValueParameters(): List<IrValueParameter> {
 }
 
 fun IrFunction.isExported(): Boolean =
-    isJsExport()
-
+    isJsExport() || getWasmExportNameIfWasmExport() != null
 
 fun generateConstExpression(
     expression: IrConst<*>,

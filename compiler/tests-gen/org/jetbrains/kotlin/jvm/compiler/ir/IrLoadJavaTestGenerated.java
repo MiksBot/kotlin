@@ -1750,6 +1750,11 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
                 runTest("compiler/testData/loadJava/compiledKotlin/annotations/AnnotationOnTypeParameter.kt");
             }
 
+            @TestMetadata("AnnotationWithVarargParam.kt")
+            public void testAnnotationWithVarargParam() throws Exception {
+                runTest("compiler/testData/loadJava/compiledKotlin/annotations/AnnotationWithVarargParam.kt");
+            }
+
             @TestMetadata("ClassLiteralArguments.kt")
             public void testClassLiteralArguments() throws Exception {
                 runTest("compiler/testData/loadJava/compiledKotlin/annotations/ClassLiteralArguments.kt");
@@ -1763,6 +1768,11 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
             @TestMetadata("PrimitiveArrayArguments.kt")
             public void testPrimitiveArrayArguments() throws Exception {
                 runTest("compiler/testData/loadJava/compiledKotlin/annotations/PrimitiveArrayArguments.kt");
+            }
+
+            @TestMetadata("SelfReferentialAnnotation.kt")
+            public void testSelfReferentialAnnotation() throws Exception {
+                runTest("compiler/testData/loadJava/compiledKotlin/annotations/SelfReferentialAnnotation.kt");
             }
 
             @TestMetadata("SimpleAnnotation.kt")
@@ -4543,6 +4553,11 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
             @TestMetadata("PropertyInConstructorExplicitVisibility.kt")
             public void testPropertyInConstructorExplicitVisibility() throws Exception {
                 runTest("compiler/testData/loadJava/compiledKotlin/visibility/PropertyInConstructorExplicitVisibility.kt");
+            }
+
+            @TestMetadata("PublishedApi.kt")
+            public void testPublishedApi() throws Exception {
+                runTest("compiler/testData/loadJava/compiledKotlin/visibility/PublishedApi.kt");
             }
 
             @TestMetadata("TopLevelVarWithPrivateSetter.kt")

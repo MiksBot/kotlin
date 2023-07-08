@@ -22,6 +22,30 @@ public class DiagnosticCompilerTestFirTestdataTestGenerated extends AbstractDiag
     @TestDataPath("$PROJECT_ROOT")
     public class Resolve {
         @Test
+        @TestMetadata("accessJavaFromKotlinViaImport.kt")
+        public void testAccessJavaFromKotlinViaImport() throws Exception {
+            runTest("compiler/fir/analysis-tests/testData/resolve/accessJavaFromKotlinViaImport.kt");
+        }
+
+        @Test
+        @TestMetadata("accessJavaFromKotlinViaStaticImport.kt")
+        public void testAccessJavaFromKotlinViaStaticImport() throws Exception {
+            runTest("compiler/fir/analysis-tests/testData/resolve/accessJavaFromKotlinViaStaticImport.kt");
+        }
+
+        @Test
+        @TestMetadata("accessJavaFromKotlinViaStaticImport2.kt")
+        public void testAccessJavaFromKotlinViaStaticImport2() throws Exception {
+            runTest("compiler/fir/analysis-tests/testData/resolve/accessJavaFromKotlinViaStaticImport2.kt");
+        }
+
+        @Test
+        @TestMetadata("accessJavaFromKotlinViaStaticImportAndPermits.kt")
+        public void testAccessJavaFromKotlinViaStaticImportAndPermits() throws Exception {
+            runTest("compiler/fir/analysis-tests/testData/resolve/accessJavaFromKotlinViaStaticImportAndPermits.kt");
+        }
+
+        @Test
         public void testAllFilesPresentInResolve() throws Exception {
             KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/fir/analysis-tests/testData/resolve"), Pattern.compile("^([^.]+)\\.kt$"), null, true);
         }
@@ -504,6 +528,12 @@ public class DiagnosticCompilerTestFirTestdataTestGenerated extends AbstractDiag
         @TestMetadata("propertyFromJavaPlusAssign.kt")
         public void testPropertyFromJavaPlusAssign() throws Exception {
             runTest("compiler/fir/analysis-tests/testData/resolve/propertyFromJavaPlusAssign.kt");
+        }
+
+        @Test
+        @TestMetadata("propertyGetterWithoutType.kt")
+        public void testPropertyGetterWithoutType() throws Exception {
+            runTest("compiler/fir/analysis-tests/testData/resolve/propertyGetterWithoutType.kt");
         }
 
         @Test
@@ -1365,6 +1395,12 @@ public class DiagnosticCompilerTestFirTestdataTestGenerated extends AbstractDiag
             @TestMetadata("loops.kt")
             public void testLoops() throws Exception {
                 runTest("compiler/fir/analysis-tests/testData/resolve/cfg/loops.kt");
+            }
+
+            @Test
+            @TestMetadata("nestedClass.kt")
+            public void testNestedClass() throws Exception {
+                runTest("compiler/fir/analysis-tests/testData/resolve/cfg/nestedClass.kt");
             }
 
             @Test
@@ -3782,6 +3818,24 @@ public class DiagnosticCompilerTestFirTestdataTestGenerated extends AbstractDiag
             }
 
             @Test
+            @TestMetadata("incompleteUserType.kt")
+            public void testIncompleteUserType() throws Exception {
+                runTest("compiler/fir/analysis-tests/testData/resolve/problems/incompleteUserType.kt");
+            }
+
+            @Test
+            @TestMetadata("incompleteUserTypeWithUnresovledTypeArgument.kt")
+            public void testIncompleteUserTypeWithUnresovledTypeArgument() throws Exception {
+                runTest("compiler/fir/analysis-tests/testData/resolve/problems/incompleteUserTypeWithUnresovledTypeArgument.kt");
+            }
+
+            @Test
+            @TestMetadata("incompleteWhen.kt")
+            public void testIncompleteWhen() throws Exception {
+                runTest("compiler/fir/analysis-tests/testData/resolve/problems/incompleteWhen.kt");
+            }
+
+            @Test
             @TestMetadata("innerClassHierarchy.kt")
             public void testInnerClassHierarchy() throws Exception {
                 runTest("compiler/fir/analysis-tests/testData/resolve/problems/innerClassHierarchy.kt");
@@ -3821,6 +3875,12 @@ public class DiagnosticCompilerTestFirTestdataTestGenerated extends AbstractDiag
             @TestMetadata("objectDerivedFromInnerClass.kt")
             public void testObjectDerivedFromInnerClass() throws Exception {
                 runTest("compiler/fir/analysis-tests/testData/resolve/problems/objectDerivedFromInnerClass.kt");
+            }
+
+            @Test
+            @TestMetadata("primaryConstructorParameterWithoutReturnType.kt")
+            public void testPrimaryConstructorParameterWithoutReturnType() throws Exception {
+                runTest("compiler/fir/analysis-tests/testData/resolve/problems/primaryConstructorParameterWithoutReturnType.kt");
             }
 
             @Test
@@ -4163,6 +4223,12 @@ public class DiagnosticCompilerTestFirTestdataTestGenerated extends AbstractDiag
             @Test
             public void testAllFilesPresentInScopes() throws Exception {
                 KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/fir/analysis-tests/testData/resolve/scopes"), Pattern.compile("^([^.]+)\\.kt$"), null, true);
+            }
+
+            @Test
+            @TestMetadata("delegatedDataClass.kt")
+            public void testDelegatedDataClass() throws Exception {
+                runTest("compiler/fir/analysis-tests/testData/resolve/scopes/delegatedDataClass.kt");
             }
 
             @Test
@@ -4939,6 +5005,12 @@ public class DiagnosticCompilerTestFirTestdataTestGenerated extends AbstractDiag
             @TestMetadata("correctJava.kt")
             public void testCorrectJava() throws Exception {
                 runTest("compiler/fir/analysis-tests/testData/resolve/unqualifiedEnum/correctJava.kt");
+            }
+
+            @Test
+            @TestMetadata("enumWithTheSameNameAsEntry.kt")
+            public void testEnumWithTheSameNameAsEntry() throws Exception {
+                runTest("compiler/fir/analysis-tests/testData/resolve/unqualifiedEnum/enumWithTheSameNameAsEntry.kt");
             }
 
             @Test
@@ -6443,6 +6515,24 @@ public class DiagnosticCompilerTestFirTestdataTestGenerated extends AbstractDiag
             @TestMetadata("FunctionTypeInJava.kt")
             public void testFunctionTypeInJava() throws Exception {
                 runTest("compiler/fir/analysis-tests/testData/resolveWithStdlib/j+k/FunctionTypeInJava.kt");
+            }
+
+            @Test
+            @TestMetadata("genericGetterForJavaOverriddenProperty.kt")
+            public void testGenericGetterForJavaOverriddenProperty() throws Exception {
+                runTest("compiler/fir/analysis-tests/testData/resolveWithStdlib/j+k/genericGetterForJavaOverriddenProperty.kt");
+            }
+
+            @Test
+            @TestMetadata("genericGetterForJavaOverriddenProperty2.kt")
+            public void testGenericGetterForJavaOverriddenProperty2() throws Exception {
+                runTest("compiler/fir/analysis-tests/testData/resolveWithStdlib/j+k/genericGetterForJavaOverriddenProperty2.kt");
+            }
+
+            @Test
+            @TestMetadata("genericGetterForSyntheticProperty.kt")
+            public void testGenericGetterForSyntheticProperty() throws Exception {
+                runTest("compiler/fir/analysis-tests/testData/resolveWithStdlib/j+k/genericGetterForSyntheticProperty.kt");
             }
 
             @Test

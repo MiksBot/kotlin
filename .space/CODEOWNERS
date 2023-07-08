@@ -9,7 +9,7 @@
 # OWNER_LIST: "Kotlin JVM" "Kotlin JS" "Kotlin Native" "Kotlin Wasm"
 # OWNER_LIST: "Kotlin Compiler Core"
 # OWNER_LIST: "Kotlin Build Infrastructure" "Kotlin Build Tools"
-# OWNER_LIST: "Kotlin IDE"
+# OWNER_LIST: "IntelliJ Kotlin Plugin"
 # OWNER_LIST: "Kotlin Release"
 # OWNER_LIST: "Kotlin Multiplatform"
 # OWNER_LIST: "Kotlin Language Evolution"
@@ -19,7 +19,7 @@
 # OWNER_LIST: Alexander.Udalov
 # OWNER_LIST: Zalim.Bashorov
 # OWNER_LIST: Ilya.Goncharov
-# OWNER_LIST: Alexander.Shabalin Pavel.Kunyavskiy Svyatoslav.Scherbina
+# OWNER_LIST: Alexander.Shabalin Aleksei.Glushko Sergey.Bogolepov Svyatoslav.Scherbina
 # Kotlin Libraries
 # OWNER_LIST: A.Qurbonzoda Vsevolod.Tolstopyato Ilya.Gorbunov Sergey.Shanshin Leonid.Startsev
 
@@ -30,7 +30,7 @@
 
 /.space/ "Kotlin Build Infrastructure"
 
-/analysis/ "Kotlin IDE"
+/analysis/ "IntelliJ Kotlin Plugin"
 /analysis/light-classes-base/ Dmitry.Gridin
 /analysis/symbol-light-classes/ Dmitry.Gridin
 /analysis/analysis-api-fir/src/org/jetbrains/kotlin/analysis/api/fir/diagnostics/KtFirDiagnostics.kt "Kotlin Compiler Core"
@@ -77,13 +77,13 @@
 /compiler/ir/backend.wasm/ "Kotlin Wasm"
 /compiler/ir/ir.interpreter/ "Kotlin JVM"
 /compiler/ir/ir.ir2cfg/ Mikhail.Glukhikh
-/compiler/ir/ir.psi2ir/ "Kotlin Compiler Core"
+/compiler/ir/ir.psi2ir/ "Kotlin JVM"
 /compiler/ir/ir.tree/ "Kotlin JVM" "Kotlin JS" "Kotlin Native" "Kotlin Wasm"
 /compiler/ir/serialization.common/ "Kotlin Native"
 /compiler/ir/serialization.js/ "Kotlin JS"
 /compiler/ir/serialization.jvm/ "Kotlin JVM"
 /compiler/javac-wrapper/ "Kotlin Compiler Core"
-/compiler/light-classes/ "Kotlin IDE"
+/compiler/light-classes/ "IntelliJ Kotlin Plugin"
 /compiler/plugin-api/ "Kotlin Compiler Core"
 /compiler/preloader/ "Kotlin Compiler Core"
 /compiler/psi/ "Kotlin Compiler Core"
@@ -95,7 +95,7 @@
 /compiler/test-infrastructure-utils/ "Kotlin Compiler Core"
 
 /compiler/testData/asJava/findClasses/ "Kotlin Compiler Core"
-/compiler/testData/asJava/lightClasses/ "Kotlin IDE"
+/compiler/testData/asJava/lightClasses/ "IntelliJ Kotlin Plugin"
 /compiler/testData/binaryCompatibility/klibEvolution/ "Kotlin Native"
 /compiler/testData/builtin-classes/ "Kotlin Libraries"
 /compiler/testData/capturedTypeApproximation/ "Kotlin Compiler Core"
@@ -230,7 +230,7 @@
 
 # UNKNOWN: /docs/
 
-/generators/analysis-api-generator/ "Kotlin IDE"
+/generators/analysis-api-generator/ "IntelliJ Kotlin Plugin"
 /generators/builtins/ A.Qurbonzoda Vsevolod.Tolstopyato Ilya.Gorbunov
 /generators/evaluate/ "Kotlin Compiler Core"
 /generators/ide-iml-to-gradle-generator/ "Kotlin Build Infrastructure"
@@ -255,10 +255,10 @@
 /kotlin-js-store/ "Kotlin JS"
 
 /kotlin-native/ "Kotlin Native"
-/kotlin-native/common/ Alexander.Shabalin Pavel.Kunyavskiy
-/kotlin-native/runtime/ Alexander.Shabalin Pavel.Kunyavskiy
+/kotlin-native/common/ Alexander.Shabalin Aleksei.Glushko
+/kotlin-native/runtime/ Alexander.Shabalin Aleksei.Glushko
 /kotlin-native/runtime/src/main/kotlin/ "Kotlin Native" A.Qurbonzoda Vsevolod.Tolstopyato Ilya.Gorbunov
-/kotlin-native/runtime/**/*.mm Alexander.Shabalin Pavel.Kunyavskiy Svyatoslav.Scherbina
+/kotlin-native/runtime/**/*.mm Alexander.Shabalin Aleksei.Glushko Sergey.Bogolepov Svyatoslav.Scherbina
 /kotlin-native/licenses/ "Kotlin Build Infrastructure"
 
 /libraries/examples/annotation-processor-example/ "Kotlin Compiler Core"
@@ -357,6 +357,7 @@
 /plugins/kapt3/kapt3-compiler/test/ "Kotlin Compiler Core" "Kotlin JVM"
 /plugins/kapt3/kapt3-compiler/testData/ "Kotlin Compiler Core" "Kotlin JVM"
 /plugins/kapt3/kapt3-compiler/tests-gen/ "Kotlin Compiler Core" "Kotlin JVM"
+/plugins/kapt4/ "Kotlin Compiler Core" "Kotlin JVM"
 /plugins/kotlinx-serialization/ Sergey.Shanshin Leonid.Startsev
 /plugins/lombok/ "Kotlin Compiler Core"
 /plugins/noarg/ "Kotlin Compiler Core"
@@ -384,7 +385,7 @@
 /wasm/ "Kotlin Wasm"
 
 # Generated files (no review required)
-*Generated.java "Kotlin" "Kotlin IDE"
+*Generated.java "Kotlin" "IntelliJ Kotlin Plugin"
 
 # Singular files
 /.gitattributes "Kotlin Build Infrastructure"

@@ -16,7 +16,7 @@ import org.jetbrains.kotlin.backend.common.lower.inline.LocalClassesInInlineLamb
 import org.jetbrains.kotlin.backend.common.lower.loops.ForLoopsLowering
 import org.jetbrains.kotlin.backend.common.lower.optimizations.FoldConstantLowering
 import org.jetbrains.kotlin.backend.common.phaser.*
-import org.jetbrains.kotlin.ir.backend.js.codegen.JsGenerationGranularity
+import org.jetbrains.kotlin.config.CommonConfigurationKeys
 import org.jetbrains.kotlin.ir.backend.js.lower.*
 import org.jetbrains.kotlin.ir.backend.js.lower.calls.CallsLowering
 import org.jetbrains.kotlin.ir.backend.js.lower.cleanup.CleanupLowering
@@ -24,8 +24,11 @@ import org.jetbrains.kotlin.ir.backend.js.lower.coroutines.AddContinuationToFunc
 import org.jetbrains.kotlin.ir.backend.js.lower.coroutines.JsSuspendArityStoreLowering
 import org.jetbrains.kotlin.ir.backend.js.lower.coroutines.JsSuspendFunctionsLowering
 import org.jetbrains.kotlin.ir.backend.js.lower.inline.*
+import org.jetbrains.kotlin.ir.backend.js.transformers.irToJs.JsGenerationGranularity
 import org.jetbrains.kotlin.ir.declarations.IrFile
 import org.jetbrains.kotlin.ir.declarations.IrModuleFragment
+import org.jetbrains.kotlin.ir.interpreter.IrInterpreterConfiguration
+import org.jetbrains.kotlin.platform.js.JsPlatforms
 
 private fun DeclarationContainerLoweringPass.runOnFilesPostfix(files: Iterable<IrFile>) = files.forEach { runOnFilePostfix(it) }
 
@@ -136,6 +139,12 @@ private val validateIrAfterLowering = makeCustomJsModulePhase(
     name = "ValidateIrAfterLowering",
     description = "Validate IR after lowering"
 ).toModuleLowering()
+
+private val collectClassDefaultConstructorsPhase = makeDeclarationTransformerPhase(
+    ::CollectClassDefaultConstructorsLowering,
+    name = "CollectClassDefaultConstructorsLowering",
+    description = "Collect classes default constructors to add it to metadata on code generating phase"
+)
 
 private val preventExportOfSyntheticDeclarationsLowering = makeDeclarationTransformerPhase(
     ::ExcludeSyntheticDeclarationsFromExportLowering,
@@ -280,7 +289,17 @@ private val saveInlineFunctionsBeforeInlining = makeDeclarationTransformerPhase(
 )
 
 private val functionInliningPhase = makeBodyLoweringPhase(
-    { FunctionInlining(it, JsInlineFunctionResolver(it), it.innerClassesSupport, allowExternalInlining = true) },
+    {
+        FunctionInlining(
+            it,
+            JsInlineFunctionResolver(it),
+            it.innerClassesSupport,
+            allowExternalInlining = true,
+            useTypeParameterUpperBound = true,
+            alwaysCreateTemporaryVariablesForArguments = true,
+            inlineArgumentsWithTheirOriginalTypeAndOffset = true
+        )
+    },
     name = "FunctionInliningPhase",
     description = "Perform function inlining",
     prerequisite = setOf(saveInlineFunctionsBeforeInlining)
@@ -459,19 +478,6 @@ private val booleanPropertyInExternalLowering = makeBodyLoweringPhase(
     name = "BooleanPropertyInExternalLowering",
     description = "Lowering which wrap boolean in external declarations with Boolean() call and add diagnostic for such cases"
 )
-
-private val foldConstantLoweringPhase = makeBodyLoweringPhase(
-    { FoldConstantLowering(it, true) },
-    name = "FoldConstantLowering",
-    description = "[Optimization] Constant Folding",
-    prerequisite = setOf(propertyAccessorInlinerLoweringPhase)
-)
-
-private val computeStringTrimPhase = makeJsModulePhase(
-    ::StringTrimLowering,
-    name = "StringTrimLowering",
-    description = "Compute trimIndent and trimMargin operations on constant strings"
-).toModuleLowering()
 
 private val localDelegatedPropertiesLoweringPhase = makeBodyLoweringPhase(
     { LocalDelegatedPropertiesLowering() },
@@ -830,20 +836,27 @@ private val cleanupLoweringPhase = makeBodyLoweringPhase(
     description = "Clean up IR before codegen"
 )
 
-private val moveOpenClassesToSeparatePlaceLowering = makeCustomJsModulePhase(
-    { context, module ->
-        if (context.granularity == JsGenerationGranularity.PER_FILE)
-            moveOpenClassesToSeparateFiles(module)
-    },
-    name = "MoveOpenClassesToSeparateFiles",
-    description = "Move open classes to separate files"
-).toModuleLowering()
-
 private val jsSuspendArityStorePhase = makeDeclarationTransformerPhase(
     ::JsSuspendArityStoreLowering,
     name = "JsSuspendArityStoreLowering",
     description = "Store arity for suspend functions to not remove it during DCE"
 )
+
+val constEvaluationPhase = makeJsModulePhase(
+    { context ->
+        // We can't inline `const val`s because this lowering can mess up incremental compilation.
+        // For example, if we inline some constant located in `lib` module then we are not going to track and update its value on change.
+        // The only usages of `const val`s that we allow to inline are the ones that are located at the same file as declaration.
+        val configuration = IrInterpreterConfiguration(
+            printOnlyExceptionMessage = true,
+            platform = JsPlatforms.defaultJsPlatform,
+            inlineConstVal = false
+        )
+        ConstEvaluationLowering(context, configuration = configuration)
+    },
+    name = "ConstEvaluationLowering",
+    description = "Evaluate functions that are marked as `IntrinsicConstEvaluation`",
+).toModuleLowering()
 
 val loweringList = listOf<Lowering>(
     scriptRemoveReceiverLowering,
@@ -867,6 +880,7 @@ val loweringList = listOf<Lowering>(
     wrapInlineDeclarationsWithReifiedTypeParametersLowering,
     saveInlineFunctionsBeforeInlining,
     functionInliningPhase,
+    constEvaluationPhase,
     copyInlineFunctionBodyLoweringPhase,
     removeInlineDeclarationsWithReifiedTypeParametersLoweringPhase,
     createScriptFunctionsPhase,
@@ -890,6 +904,7 @@ val loweringList = listOf<Lowering>(
     initializersLoweringPhase,
     initializersCleanupLoweringPhase,
     kotlinNothingValueExceptionPhase,
+    collectClassDefaultConstructorsPhase,
     // Common prefix ends
     enumWhenPhase,
     enumEntryInstancesLoweringPhase,
@@ -916,8 +931,6 @@ val loweringList = listOf<Lowering>(
     propertyAccessorInlinerLoweringPhase,
     copyPropertyAccessorBodiesLoweringPass,
     booleanPropertyInExternalLowering,
-    foldConstantLoweringPhase,
-    computeStringTrimPhase,
     privateMembersLoweringPhase,
     privateMemberUsagesLoweringPhase,
     defaultArgumentStubGeneratorPhase,
@@ -952,12 +965,8 @@ val loweringList = listOf<Lowering>(
     cleanupLoweringPhase,
     // Currently broken due to static members lowering making single-open-class
     // files non-recognizable as single-class files
-    // moveOpenClassesToSeparatePlaceLowering,
     validateIrAfterLowering,
 )
-
-// TODO comment? Eliminate ModuleLowering's? Don't filter them here?
-val pirLowerings = loweringList.filter { it is DeclarationLowering || it is BodyLowering } + staticMembersLoweringPhase
 
 val jsPhases = SameTypeNamedCompilerPhase(
     name = "IrModuleLowering",
@@ -1000,12 +1009,27 @@ private val es6PrimaryConstructorUsageOptimizationLowering = makeBodyLoweringPha
     prerequisite = setOf(es6BoxParameterOptimization, es6PrimaryConstructorOptimizationLowering)
 )
 
+private val purifyObjectInstanceGetters = makeDeclarationTransformerPhase(
+    ::PurifyObjectInstanceGettersLowering,
+    name = "PurifyObjectInstanceGettersLowering",
+    description = "[Optimization] Make object instance getter functions pure whenever it's possible",
+)
+
+private val inlineObjectsWithPureInitialization = makeBodyLoweringPhase(
+    ::InlineObjectsWithPureInitializationLowering,
+    name = "InlineObjectsWithPureInitializationLowering",
+    description = "[Optimization] Inline object instance fields getters whenever it's possible",
+    prerequisite = setOf(purifyObjectInstanceGetters)
+)
+
 val optimizationLoweringList = listOf<Lowering>(
     es6CollectConstructorsWhichNeedBoxParameterLowering,
     es6CollectPrimaryConstructorsWhichCouldBeOptimizedLowering,
     es6BoxParameterOptimization,
     es6PrimaryConstructorOptimizationLowering,
     es6PrimaryConstructorUsageOptimizationLowering,
+    purifyObjectInstanceGetters,
+    inlineObjectsWithPureInitialization
 )
 
 val jsOptimizationPhases = SameTypeNamedCompilerPhase(

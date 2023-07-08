@@ -22,7 +22,7 @@ fun BuildResult.assertOutputContains(
 }
 
 /**
- * Asserts Gradle output contains any of [expectedSubString] strings.
+ * Asserts Gradle output contains any of [expectedSubStrings] strings.
  */
 fun BuildResult.assertOutputContainsAny(
     vararg expectedSubStrings: String,
@@ -103,11 +103,12 @@ fun BuildResult.assertOutputDoesNotContain(
  */
 fun BuildResult.assertOutputContains(
     expected: Regex,
+    message: String = "Build output does not contain any line matching '$expected' regex.",
 ) {
     assert(output.contains(expected)) {
         printBuildOutput()
 
-        "Build output does not contain any line matching '$expected' regex."
+        message
     }
 }
 
@@ -250,6 +251,27 @@ fun BuildResult.assertCompilerArgument(
         printBuildOutput()
 
         "$taskPath task compiler arguments don't contain $expectedArgument. Actual content: $compilerArguments"
+    }
+}
+
+fun BuildResult.assertCompilerArguments(
+    taskPath: String,
+    vararg expectedArguments: String,
+) {
+    val taskOutput = getOutputForTask(taskPath)
+    val compilerArguments = taskOutput.lines().first {
+        it.contains("Kotlin compiler args:")
+    }.substringAfter("Kotlin compiler args:")
+
+    val nonExistingArguments = expectedArguments
+        .filter {
+            !compilerArguments.contains(it)
+        }
+
+    assert(nonExistingArguments.isEmpty()) {
+        printBuildOutput()
+
+        "$taskPath task compiler arguments don't contain ${nonExistingArguments.joinToString()}. Actual content: $compilerArguments"
     }
 }
 

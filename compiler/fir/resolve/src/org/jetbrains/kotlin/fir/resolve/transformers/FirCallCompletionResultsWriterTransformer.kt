@@ -466,8 +466,6 @@ class FirCallCompletionResultsWriterTransformer(
             delegatedConstructorCall.calleeReference as? FirNamedReferenceWithCandidate ?: return delegatedConstructorCall
         val subCandidate = calleeReference.candidate
 
-        val argumentsMapping = runIf(!calleeReference.isError) { calleeReference.candidate.createArgumentsMapping() }
-        delegatedConstructorCall.argumentList.transformArguments(this, argumentsMapping)
         if (calleeReference.isError) {
             subCandidate.argumentMapping?.let {
                 delegatedConstructorCall.replaceArgumentList(buildArgumentListForErrorCall(delegatedConstructorCall.argumentList, it))
@@ -478,6 +476,10 @@ class FirCallCompletionResultsWriterTransformer(
                 delegatedConstructorCall.replaceArgumentList(buildResolvedArgumentList(it, delegatedConstructorCall.argumentList.source))
             }
         }
+
+        val argumentsMapping = runIf(!calleeReference.isError) { subCandidate.createArgumentsMapping() }
+        delegatedConstructorCall.argumentList.transformArguments(this, argumentsMapping)
+
         return delegatedConstructorCall.apply {
             replaceCalleeReference(calleeReference.toResolvedReference())
         }
@@ -797,7 +799,7 @@ class FirCallCompletionResultsWriterTransformer(
         return varargArgumentsExpression
     }
 
-    // TODO: report warning with a checker and return true here only in case of errors
+    // TODO: report warning with a checker and return true here only in case of errors, KT-59676
     private fun FirNamedReferenceWithCandidate.hasAdditionalResolutionErrors(): Boolean =
         candidate.system.errors.any { it is InferredEmptyIntersection }
 

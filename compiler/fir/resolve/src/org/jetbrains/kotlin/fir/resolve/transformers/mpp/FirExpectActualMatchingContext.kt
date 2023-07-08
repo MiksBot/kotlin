@@ -8,9 +8,11 @@ package org.jetbrains.kotlin.fir.resolve.transformers.mpp
 import org.jetbrains.kotlin.descriptors.ClassKind
 import org.jetbrains.kotlin.descriptors.Modality
 import org.jetbrains.kotlin.descriptors.Visibility
-import org.jetbrains.kotlin.descriptors.isEnumClass
 import org.jetbrains.kotlin.fir.FirSession
-import org.jetbrains.kotlin.fir.declarations.*
+import org.jetbrains.kotlin.fir.declarations.FirDeclarationOrigin
+import org.jetbrains.kotlin.fir.declarations.FirResolvePhase
+import org.jetbrains.kotlin.fir.declarations.collectEnumEntries
+import org.jetbrains.kotlin.fir.declarations.isAnnotationConstructor
 import org.jetbrains.kotlin.fir.isSubstitutionOrIntersectionOverride
 import org.jetbrains.kotlin.fir.resolve.*
 import org.jetbrains.kotlin.fir.resolve.substitution.ConeSubstitutor
@@ -24,21 +26,27 @@ import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.resolve.calls.mpp.ExpectActualMatchingContext
 import org.jetbrains.kotlin.types.AbstractTypeChecker
+import org.jetbrains.kotlin.types.TypeCheckerState
 import org.jetbrains.kotlin.types.Variance
-import org.jetbrains.kotlin.types.model.KotlinTypeMarker
-import org.jetbrains.kotlin.types.model.SimpleTypeMarker
-import org.jetbrains.kotlin.types.model.TypeSubstitutorMarker
-import org.jetbrains.kotlin.types.model.TypeSystemInferenceExtensionContext
-import org.jetbrains.kotlin.utils.addIfNotNull
+import org.jetbrains.kotlin.types.model.*
 import org.jetbrains.kotlin.utils.addToStdlib.UnsafeCastFunction
 import org.jetbrains.kotlin.utils.addToStdlib.castAll
 
 class FirExpectActualMatchingContext(
     private val actualSession: FirSession,
     private val scopeSession: ScopeSession
-) : ExpectActualMatchingContext<FirBasedSymbol<*>>, TypeSystemInferenceExtensionContext by actualSession.typeContext {
+) : ExpectActualMatchingContext<FirBasedSymbol<*>>, TypeSystemContext by actualSession.typeContext {
     override val shouldCheckReturnTypesOfCallables: Boolean
         get() = false
+
+    override val enumConstructorsAreAlwaysCompatible: Boolean
+        get() = true
+
+    override val allowClassActualizationWithWiderVisibility: Boolean
+        get() = true
+
+    override val allowTransitiveSupertypesActualization: Boolean
+        get() = true
 
     private fun CallableSymbolMarker.asSymbol(): FirCallableSymbol<*> = this as FirCallableSymbol<*>
     private fun FunctionSymbolMarker.asSymbol(): FirFunctionSymbol<*> = this as FirFunctionSymbol<*>
@@ -79,8 +87,13 @@ class FirExpectActualMatchingContext(
         get() = asSymbol().resolvedStatus.isInline
     override val RegularClassSymbolMarker.isValue: Boolean
         get() = asSymbol().resolvedStatus.isInline
+
+    /*
+     * In this context java interfaces should be considered as not fun interface, so they will be later checked by [isNotSamInterface] function
+     */
     override val RegularClassSymbolMarker.isFun: Boolean
-        get() = asSymbol().resolvedStatus.isFun
+        get() = asSymbol().takeUnless { it.origin is FirDeclarationOrigin.Java }?.resolvedStatus?.isFun ?: false
+
     override val ClassLikeSymbolMarker.typeParameters: List<TypeParameterSymbolMarker>
         get() = asSymbol().typeParameterSymbols
 
@@ -136,6 +149,9 @@ class FirExpectActualMatchingContext(
     override val RegularClassSymbolMarker.superTypes: List<KotlinTypeMarker>
         get() = asSymbol().resolvedSuperTypes
 
+    override val RegularClassSymbolMarker.defaultType: KotlinTypeMarker
+        get() = asSymbol().defaultType()
+
     override fun RegularClassSymbolMarker.collectAllMembers(isActualDeclaration: Boolean): List<FirBasedSymbol<*>> {
         val symbol = asSymbol()
         val session = when (isActualDeclaration) {
@@ -155,9 +171,13 @@ class FirExpectActualMatchingContext(
                 scope.getMembersTo(this, name)
             }
 
-            // TODO: replace with scope lookup
-            for (name in symbol.declarationSymbols.mapNotNull { (it as? FirRegularClassSymbol)?.classId?.shortClassName }) {
-                addIfNotNull(scope.getSingleClassifier(name) as? FirRegularClassSymbol)
+            for (name in scope.getClassifierNames()) {
+                scope.processClassifiersByName(name) {
+                    // We should skip nested classes from supertypes here
+                    if (it is FirRegularClassSymbol && it.classId.parentClassId == symbol.classId) {
+                        add(it)
+                    }
+                }
             }
             getConstructorsTo(this, scope)
         }
@@ -248,10 +268,22 @@ class FirExpectActualMatchingContext(
         if (actualType == null) return false
 
         return AbstractTypeChecker.equalTypes(
-            actualSession.typeContext.newTypeCheckerState(errorTypesEqualToAnything = true, stubTypesEqualToAnything = false),
+            createTypeCheckerState(),
             expectType,
             actualType
         )
+    }
+
+    override fun actualTypeIsSubtypeOfExpectType(expectType: KotlinTypeMarker, actualType: KotlinTypeMarker): Boolean {
+        return AbstractTypeChecker.isSubtypeOf(
+            createTypeCheckerState(),
+            subType = actualType,
+            superType = expectType
+        )
+    }
+
+    private fun createTypeCheckerState(): TypeCheckerState {
+        return actualSession.typeContext.newTypeCheckerState(errorTypesEqualToAnything = true, stubTypesEqualToAnything = false)
     }
 
     override fun RegularClassSymbolMarker.isNotSamInterface(): Boolean {
@@ -263,14 +295,7 @@ class FirExpectActualMatchingContext(
     override fun CallableSymbolMarker.shouldSkipMatching(containingExpectClass: RegularClassSymbolMarker): Boolean {
         val symbol = asSymbol()
         val classSymbol = containingExpectClass.asSymbol()
-        val isConstructor = symbol is FirConstructorSymbol
-        if (isConstructor && classSymbol.classKind.isEnumClass) {
-            /*
-             * Expect enums in FIR have (expect) constructors, but actually there is no need to map them
-             */
-            return true
-        }
-        if (!isConstructor && symbol.dispatchReceiverType?.classId != classSymbol.classId) {
+        if (symbol !is FirConstructorSymbol && symbol.dispatchReceiverType?.classId != classSymbol.classId) {
             // Skip fake overrides
             return true
         }
@@ -279,10 +304,5 @@ class FirExpectActualMatchingContext(
     }
 
     override val CallableSymbolMarker.hasStableParameterNames: Boolean
-        get() = when (asSymbol().origin) {
-            is FirDeclarationOrigin.Java,
-            FirDeclarationOrigin.Enhancement,
-            FirDeclarationOrigin.DynamicScope -> false
-            else -> true
-        }
+        get() = asSymbol().rawStatus.hasStableParameterNames
 }

@@ -19,6 +19,7 @@
 #include "GlobalData.hpp"
 #include "ObjectOps.hpp"
 #include "ObjectTestSupport.hpp"
+#include "SafePoint.hpp"
 #include "SingleThreadExecutor.hpp"
 #include "TestSupport.hpp"
 #include "ThreadData.hpp"
@@ -211,7 +212,7 @@ public:
         mm::GlobalsRegistry::Instance().ClearForTests();
         mm::SpecialRefRegistry::instance().clearForTests();
         mm::GlobalData::Instance().extraObjectDataFactory().ClearForTests();
-        mm::GlobalData::Instance().gc().impl().objectFactory().ClearForTests();
+        mm::GlobalData::Instance().gc().ClearForTests();
     }
 
     testing::MockFunction<void(ObjHeader*)>& finalizerHook() { return finalizerHooks_.finalizerHook(); }
@@ -242,7 +243,7 @@ TEST_F(SameThreadMarkAndSweepTest, RootSet) {
         ASSERT_THAT(IsMarked(stack2.header()), false);
         ASSERT_THAT(IsMarked(stack3.header()), false);
 
-        threadData.gc().ScheduleAndWaitFullGC();
+        threadData.gc().ScheduleAndWaitFullGCWithFinalizers();
 
         EXPECT_THAT(
                 Alive(threadData),
@@ -288,7 +289,7 @@ TEST_F(SameThreadMarkAndSweepTest, InterconnectedRootSet) {
         ASSERT_THAT(IsMarked(stack2.header()), false);
         ASSERT_THAT(IsMarked(stack3.header()), false);
 
-        threadData.gc().ScheduleAndWaitFullGC();
+        threadData.gc().ScheduleAndWaitFullGCWithFinalizers();
 
         EXPECT_THAT(
                 Alive(threadData),
@@ -312,7 +313,7 @@ TEST_F(SameThreadMarkAndSweepTest, FreeObjects) {
         ASSERT_THAT(IsMarked(object1.header()), false);
         ASSERT_THAT(IsMarked(object2.header()), false);
 
-        threadData.gc().ScheduleAndWaitFullGC();
+        threadData.gc().ScheduleAndWaitFullGCWithFinalizers();
 
         EXPECT_THAT(Alive(threadData), testing::UnorderedElementsAre());
     });
@@ -329,7 +330,7 @@ TEST_F(SameThreadMarkAndSweepTest, FreeObjectsWithFinalizers) {
 
         EXPECT_CALL(finalizerHook(), Call(object1.header()));
         EXPECT_CALL(finalizerHook(), Call(object2.header()));
-        threadData.gc().ScheduleAndWaitFullGC();
+        threadData.gc().ScheduleAndWaitFullGCWithFinalizers();
 
         EXPECT_THAT(Alive(threadData), testing::UnorderedElementsAre());
     });
@@ -349,7 +350,7 @@ TEST_F(SameThreadMarkAndSweepTest, FreeObjectWithFreeWeak) {
         ASSERT_THAT(weak1.get(), object1.header());
 
         EXPECT_CALL(finalizerHook(), Call(weak1.header()));
-        threadData.gc().ScheduleAndWaitFullGC();
+        threadData.gc().ScheduleAndWaitFullGCWithFinalizers();
 
         EXPECT_THAT(Alive(threadData), testing::UnorderedElementsAre());
     });
@@ -366,7 +367,7 @@ TEST_F(SameThreadMarkAndSweepTest, FreeObjectWithHoldedWeak) {
         ASSERT_THAT(IsMarked(weak1.header()), false);
         ASSERT_THAT(weak1.get(), object1.header());
 
-        threadData.gc().ScheduleAndWaitFullGC();
+        threadData.gc().ScheduleAndWaitFullGCWithFinalizers();
 
         EXPECT_THAT(Alive(threadData), testing::UnorderedElementsAre(weak1.header(), stack.header()));
         EXPECT_THAT(IsMarked(weak1.header()), false);
@@ -399,7 +400,7 @@ TEST_F(SameThreadMarkAndSweepTest, ObjectReferencedFromRootSet) {
         ASSERT_THAT(IsMarked(object3.header()), false);
         ASSERT_THAT(IsMarked(object4.header()), false);
 
-        threadData.gc().ScheduleAndWaitFullGC();
+        threadData.gc().ScheduleAndWaitFullGCWithFinalizers();
 
         EXPECT_THAT(
                 Alive(threadData),
@@ -448,7 +449,7 @@ TEST_F(SameThreadMarkAndSweepTest, ObjectsWithCycles) {
         ASSERT_THAT(IsMarked(object5.header()), false);
         ASSERT_THAT(IsMarked(object6.header()), false);
 
-        threadData.gc().ScheduleAndWaitFullGC();
+        threadData.gc().ScheduleAndWaitFullGCWithFinalizers();
 
         EXPECT_THAT(
                 Alive(threadData),
@@ -499,7 +500,7 @@ TEST_F(SameThreadMarkAndSweepTest, ObjectsWithCyclesAndFinalizers) {
 
         EXPECT_CALL(finalizerHook(), Call(object5.header()));
         EXPECT_CALL(finalizerHook(), Call(object6.header()));
-        threadData.gc().ScheduleAndWaitFullGC();
+        threadData.gc().ScheduleAndWaitFullGCWithFinalizers();
 
         EXPECT_THAT(
                 Alive(threadData),
@@ -532,7 +533,7 @@ TEST_F(SameThreadMarkAndSweepTest, ObjectsWithCyclesIntoRootSet) {
         ASSERT_THAT(IsMarked(object1.header()), false);
         ASSERT_THAT(IsMarked(object2.header()), false);
 
-        threadData.gc().ScheduleAndWaitFullGC();
+        threadData.gc().ScheduleAndWaitFullGCWithFinalizers();
 
         EXPECT_THAT(Alive(threadData), testing::UnorderedElementsAre(global.header(), stack.header(), object1.header(), object2.header()));
         EXPECT_THAT(IsMarked(global.header()), false);
@@ -576,8 +577,8 @@ TEST_F(SameThreadMarkAndSweepTest, RunGCTwice) {
         ASSERT_THAT(IsMarked(object5.header()), false);
         ASSERT_THAT(IsMarked(object6.header()), false);
 
-        threadData.gc().ScheduleAndWaitFullGC();
-        threadData.gc().ScheduleAndWaitFullGC();
+        threadData.gc().ScheduleAndWaitFullGCWithFinalizers();
+        threadData.gc().ScheduleAndWaitFullGCWithFinalizers();
 
         EXPECT_THAT(
                 Alive(threadData),
@@ -607,7 +608,7 @@ TEST_F(SameThreadMarkAndSweepTest, PermanentObjects) {
         ASSERT_THAT(Alive(threadData), testing::UnorderedElementsAre(global2.header()));
         EXPECT_THAT(IsMarked(global2.header()), false);
 
-        threadData.gc().ScheduleAndWaitFullGC();
+        threadData.gc().ScheduleAndWaitFullGCWithFinalizers();
 
         EXPECT_THAT(Alive(threadData), testing::UnorderedElementsAre(global2.header()));
         EXPECT_THAT(IsMarked(global2.header()), false);
@@ -627,7 +628,7 @@ TEST_F(SameThreadMarkAndSweepTest, SameObjectInRootSet) {
         EXPECT_THAT(IsMarked(global.header()), false);
         EXPECT_THAT(IsMarked(object.header()), false);
 
-        threadData.gc().ScheduleAndWaitFullGC();
+        threadData.gc().ScheduleAndWaitFullGCWithFinalizers();
 
         EXPECT_THAT(Alive(threadData), testing::UnorderedElementsAre(global.header(), object.header()));
         EXPECT_THAT(IsMarked(global.header()), false);
@@ -723,18 +724,19 @@ TEST_F(SameThreadMarkAndSweepTest, MultipleMutatorsCollect) {
                 .wait();
     }
 
-    std_support::vector<std::future<void>> gcFutures(kDefaultThreadCount);
+    std_support::vector<std::future<void>> gcFutures;
 
-    gcFutures[0] = mutators[0].Execute([](mm::ThreadData& threadData, Mutator& mutator) { threadData.gc().ScheduleAndWaitFullGC(); });
-
-    // Spin until thread suspension is requested.
-    while (!mm::IsThreadSuspensionRequested()) {
+    std::atomic<bool> gcDone = false;
+    for (auto& mutator : mutators) {
+        gcFutures.emplace_back(mutator.Execute([&](mm::ThreadData& threadData, Mutator& mutator) noexcept {
+            while (!gcDone.load(std::memory_order_relaxed)) {
+                mm::safePoint(threadData);
+            }
+        }));
     }
 
-    for (int i = 1; i < kDefaultThreadCount; ++i) {
-        gcFutures[i] =
-                mutators[i].Execute([](mm::ThreadData& threadData, Mutator& mutator) { threadData.gc().SafePointFunctionPrologue(); });
-    }
+    mm::GlobalData::Instance().gc().ScheduleAndWaitFullGCWithFinalizers();
+    gcDone.store(true, std::memory_order_relaxed);
 
     for (auto& future : gcFutures) {
         future.wait();
@@ -779,15 +781,27 @@ TEST_F(SameThreadMarkAndSweepTest, MultipleMutatorsAllCollect) {
                 .wait();
     }
 
-    std_support::vector<std::future<void>> gcFutures(kDefaultThreadCount);
+    std_support::vector<std::future<void>> gcFutures;
 
-    // TODO: Maybe check that only one GC is performed.
-    for (int i = 0; i < kDefaultThreadCount; ++i) {
-        gcFutures[i] = mutators[i].Execute([](mm::ThreadData& threadData, Mutator& mutator) { threadData.gc().ScheduleAndWaitFullGC(); });
+    for (auto& mutator : mutators) {
+        gcFutures.emplace_back(mutator.Execute([](mm::ThreadData& threadData, Mutator& mutator) {
+            threadData.gc().ScheduleAndWaitFullGCWithFinalizers();
+            // If GC starts before all thread executed line above, two gc will be run
+            // So we temporary switch threads to native state and then return them back after all GC runs are done
+            SwitchThreadState(mm::GetMemoryState(), kotlin::ThreadState::kNative);
+        }));
     }
 
     for (auto& future : gcFutures) {
         future.wait();
+    }
+
+    for (int i = 0; i < kDefaultThreadCount; ++i) {
+        mutators[i]
+                .Execute([](mm::ThreadData& threadData, Mutator& mutator) {
+                    SwitchThreadState(mm::GetMemoryState(), kotlin::ThreadState::kRunnable);
+                })
+                .wait();
     }
 
     std_support::vector<ObjHeader*> expectedAlive;
@@ -830,33 +844,32 @@ TEST_F(SameThreadMarkAndSweepTest, MultipleMutatorsAddToRootSetAfterCollectionRe
         mutator.AddStackRoot(locals[i]);
     };
 
-    mutators[0]
-            .Execute([expandRootSet, allocateInHeap](mm::ThreadData& threadData, Mutator& mutator) {
-                allocateInHeap(threadData, mutator, 0);
-                expandRootSet(threadData, mutator, 0);
-            })
-            .wait();
-
     // Allocate everything in heap before scheduling the GC.
-    for (int i = 1; i < kDefaultThreadCount; ++i) {
+    for (int i = 0; i < kDefaultThreadCount; ++i) {
         mutators[i]
                 .Execute([allocateInHeap, i](mm::ThreadData& threadData, Mutator& mutator) { allocateInHeap(threadData, mutator, i); })
                 .wait();
     }
 
-    std_support::vector<std::future<void>> gcFutures(kDefaultThreadCount);
-    gcFutures[0] = mutators[0].Execute([](mm::ThreadData& threadData, Mutator& mutator) { threadData.gc().ScheduleAndWaitFullGC(); });
+    std_support::vector<std::future<void>> gcFutures;
+    auto epoch = mm::GlobalData::Instance().gc().Schedule();
+    std::atomic<bool> gcDone = false;
 
     // Spin until thread suspension is requested.
     while (!mm::IsThreadSuspensionRequested()) {
     }
 
-    for (int i = 1; i < kDefaultThreadCount; ++i) {
-        gcFutures[i] = mutators[i].Execute([i, expandRootSet](mm::ThreadData& threadData, Mutator& mutator) {
+    for (int i = 0; i < kDefaultThreadCount; ++i) {
+        gcFutures.emplace_back(mutators[i].Execute([&gcDone, i, expandRootSet](mm::ThreadData& threadData, Mutator& mutator) {
             expandRootSet(threadData, mutator, i);
-            threadData.gc().SafePointFunctionPrologue();
-        });
+            while (!gcDone.load(std::memory_order_relaxed)) {
+                mm::safePoint(threadData);
+            }
+        }));
     }
+
+    mm::GlobalData::Instance().gc().WaitFinalizers(epoch);
+    gcDone.store(true, std::memory_order_relaxed);
 
     for (auto& future : gcFutures) {
         future.wait();
@@ -908,18 +921,19 @@ TEST_F(SameThreadMarkAndSweepTest, CrossThreadReference) {
                 .wait();
     }
 
-    std_support::vector<std::future<void>> gcFutures(kDefaultThreadCount);
+    std_support::vector<std::future<void>> gcFutures;
 
-    gcFutures[0] = mutators[0].Execute([](mm::ThreadData& threadData, Mutator& mutator) { threadData.gc().ScheduleAndWaitFullGC(); });
-
-    // Spin until thread suspension is requested.
-    while (!mm::IsThreadSuspensionRequested()) {
+    std::atomic<bool> gcDone = false;
+    for (auto& mutator : mutators) {
+        gcFutures.emplace_back(mutator.Execute([&](mm::ThreadData& threadData, Mutator& mutator) noexcept {
+            while (!gcDone.load(std::memory_order_relaxed)) {
+                mm::safePoint(threadData);
+            }
+        }));
     }
 
-    for (int i = 1; i < kDefaultThreadCount; ++i) {
-        gcFutures[i] =
-                mutators[i].Execute([](mm::ThreadData& threadData, Mutator& mutator) { threadData.gc().SafePointFunctionPrologue(); });
-    }
+    mm::GlobalData::Instance().gc().ScheduleAndWaitFullGCWithFinalizers();
+    gcDone.store(true, std::memory_order_relaxed);
 
     for (auto& future : gcFutures) {
         future.wait();
@@ -969,23 +983,25 @@ TEST_F(SameThreadMarkAndSweepTest, MultipleMutatorsWeaks) {
         mutators[i].Execute([](mm::ThreadData& threadData, Mutator& mutator) {}).wait();
     }
 
-    std_support::vector<std::future<void>> gcFutures(kDefaultThreadCount);
-
-    gcFutures[0] = mutators[0].Execute([weak](mm::ThreadData& threadData, Mutator& mutator) {
-        threadData.gc().ScheduleAndWaitFullGC();
-        EXPECT_THAT(weak->get(), nullptr);
-    });
+    std_support::vector<std::future<void>> gcFutures;
+    auto epoch = mm::GlobalData::Instance().gc().Schedule();
+    std::atomic<bool> gcDone = false;
 
     // Spin until thread suspension is requested.
     while (!mm::IsThreadSuspensionRequested()) {
     }
 
-    for (int i = 1; i < kDefaultThreadCount; ++i) {
-        gcFutures[i] = mutators[i].Execute([weak](mm::ThreadData& threadData, Mutator& mutator) {
-            threadData.gc().SafePointFunctionPrologue();
-            EXPECT_THAT(weak->get(), nullptr);
-        });
+    for (auto& mutator : mutators) {
+        gcFutures.emplace_back(mutator.Execute([&](mm::ThreadData& threadData, Mutator& mutator) noexcept {
+            while (!gcDone.load(std::memory_order_relaxed)) {
+                mm::safePoint(threadData);
+                EXPECT_THAT(weak->get(), nullptr);
+            }
+        }));
     }
+
+    mm::GlobalData::Instance().gc().WaitFinalizers(epoch);
+    gcDone.store(true, std::memory_order_relaxed);
 
     for (auto& future : gcFutures) {
         future.wait();
@@ -1021,9 +1037,9 @@ TEST_F(SameThreadMarkAndSweepTest, NewThreadsWhileRequestingCollection) {
                 .wait();
     }
 
-    std_support::vector<std::future<void>> gcFutures(kDefaultThreadCount);
-
-    gcFutures[0] = mutators[0].Execute([](mm::ThreadData& threadData, Mutator& mutator) { threadData.gc().ScheduleAndWaitFullGC(); });
+    std_support::vector<std::future<void>> gcFutures;
+    auto epoch = mm::GlobalData::Instance().gc().Schedule();
+    std::atomic<bool> gcDone = false;
 
     // Spin until thread suspension is requested.
     while (!mm::IsThreadSuspensionRequested()) {
@@ -1034,14 +1050,26 @@ TEST_F(SameThreadMarkAndSweepTest, NewThreadsWhileRequestingCollection) {
     std_support::vector<std::future<void>> attachFutures(kDefaultThreadCount);
 
     for (int i = 0; i < kDefaultThreadCount; ++i) {
-        attachFutures[i] = newMutators[i].Execute([i, expandRootSet](mm::ThreadData& threadData, Mutator& mutator) { expandRootSet(threadData, mutator, i + kDefaultThreadCount); });
+        attachFutures[i] = newMutators[i].Execute([&gcDone, i, expandRootSet](mm::ThreadData& threadData, Mutator& mutator) {
+            expandRootSet(threadData, mutator, i + kDefaultThreadCount);
+            while (!gcDone.load(std::memory_order_relaxed)) {
+                mm::safePoint(threadData);
+            }
+        });
     }
 
     // All the other threads are stopping at safe points.
-    for (int i = 1; i < kDefaultThreadCount; ++i) {
-        gcFutures[i] =
-                mutators[i].Execute([](mm::ThreadData& threadData, Mutator& mutator) { threadData.gc().SafePointFunctionPrologue(); });
+    for (auto& mutator : mutators) {
+        gcFutures.emplace_back(mutator.Execute([&gcDone](mm::ThreadData& threadData, Mutator& mutator) {
+            while (!gcDone.load(std::memory_order_relaxed)) {
+                mm::safePoint(threadData);
+            }
+        }));
     }
+
+    // Wait for the GC to be done.
+    mm::GlobalData::Instance().gc().WaitFinalizers(epoch);
+    gcDone.store(true, std::memory_order_relaxed);
 
     // GC will be completed first
     for (auto& future : gcFutures) {
@@ -1090,7 +1118,7 @@ TEST_F(SameThreadMarkAndSweepTest, FreeObjectWithFreeWeakReversedOrder) {
         global1->field1 = object1_local.header();
         while (weak.load() == nullptr)
             ;
-        threadData.gc().ScheduleAndWaitFullGC();
+        threadData.gc().ScheduleAndWaitFullGCWithFinalizers();
 
         ASSERT_THAT(Alive(threadData), testing::UnorderedElementsAre(object1_local.header(), weak.load()->header(), global1.header()));
         ASSERT_THAT(IsMarked(global1.header()), false);
@@ -1101,7 +1129,7 @@ TEST_F(SameThreadMarkAndSweepTest, FreeObjectWithFreeWeakReversedOrder) {
         global1->field1 = nullptr;
 
         EXPECT_CALL(finalizerHook(), Call(weak.load()->header()));
-        threadData.gc().ScheduleAndWaitFullGC();
+        threadData.gc().ScheduleAndWaitFullGCWithFinalizers();
 
         EXPECT_THAT(Alive(threadData), testing::UnorderedElementsAre(global1.header()));
         done = true;
@@ -1113,7 +1141,7 @@ TEST_F(SameThreadMarkAndSweepTest, FreeObjectWithFreeWeakReversedOrder) {
         auto& weak_local = InstallWeakReference(threadData, object1.load()->header(), holder.slot());
         weak = &weak_local;
         *holder.slot() = nullptr;
-        while (!done) threadData.gc().SafePointLoopBody();
+        while (!done) mm::safePoint(threadData);
     });
 
     f0.wait();

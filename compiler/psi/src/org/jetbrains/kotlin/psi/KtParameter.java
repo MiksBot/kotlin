@@ -154,7 +154,7 @@ public class KtParameter extends KtNamedDeclarationStub<KotlinParameterStub> imp
     private <T extends PsiElement> boolean checkParentOfParentType(Class<T> klass) {
         // `parent` is supposed to be [KtParameterList]
         PsiElement parent = getParent();
-        if (parent == null || parent.getNextSibling() instanceof PsiErrorElement) {
+        if (parent == null) {
             return false;
         }
         return klass.isInstance(parent.getParent());

@@ -29,7 +29,7 @@ internal class CodeGenerator(override val generationState: NativeGenerationState
 
     fun llvmFunction(function: IrFunction): LlvmCallable =
             llvmFunctionOrNull(function)
-                    ?: error("no function ${function.name} in ${function.file.fqName}")
+                    ?: error("no function ${function.name} in ${function.file.packageFqName}")
 
     fun llvmFunctionOrNull(function: IrFunction): LlvmCallable? =
             function.llvmFunctionOrNull
@@ -1294,7 +1294,7 @@ internal abstract class FunctionGenerationContext(
         return if (irClass.isExternalObjCClass()) {
             generationState.dependenciesTracker.add(irClass)
             if (irClass.isObjCMetaClass()) {
-                val name = irClass.descriptor.getExternalObjCMetaClassBinaryName()
+                val name = irClass.getExternalObjCMetaClassBinaryName()
                 val objCClass = getObjCClass(name)
 
                 val getClass = llvm.externalNativeRuntimeFunction(
@@ -1304,7 +1304,7 @@ internal abstract class FunctionGenerationContext(
                 )
                 call(getClass, listOf(objCClass), exceptionHandler = exceptionHandler)
             } else {
-                getObjCClass(irClass.descriptor.getExternalObjCClassBinaryName())
+                getObjCClass(irClass.getExternalObjCClassBinaryName())
             }
         } else {
             if (irClass.isObjCMetaClass()) {

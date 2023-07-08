@@ -20,12 +20,14 @@ import org.jetbrains.kotlin.diagnostics.rendering.CommonRenderers.STRING
 import org.jetbrains.kotlin.diagnostics.rendering.CommonRenderers.commaSeparated
 import org.jetbrains.kotlin.diagnostics.rendering.LanguageFeatureMessageRenderer
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirDiagnosticRenderers.AMBIGUOUS_CALLS
+import org.jetbrains.kotlin.fir.analysis.diagnostics.FirDiagnosticRenderers.CALLEE_NAME
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirDiagnosticRenderers.DECLARATION_NAME
-import org.jetbrains.kotlin.fir.analysis.diagnostics.FirDiagnosticRenderers.FIR
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirDiagnosticRenderers.FQ_NAMES_IN_TYPES
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirDiagnosticRenderers.FUNCTIONAL_TYPE_KINDS
+import org.jetbrains.kotlin.fir.analysis.diagnostics.FirDiagnosticRenderers.SYMBOLS_ON_NEWLINE_WITH_INDENT
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirDiagnosticRenderers.MODULE_DATA
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirDiagnosticRenderers.NAME_OF_CONTAINING_DECLARATION_OR_FILE
+import org.jetbrains.kotlin.fir.analysis.diagnostics.FirDiagnosticRenderers.NAME_OF_DECLARATION_OR_FILE
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirDiagnosticRenderers.RENDER_CLASS_OR_OBJECT
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirDiagnosticRenderers.RENDER_CLASS_OR_OBJECT_NAME
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirDiagnosticRenderers.RENDER_COLLECTION_OF_TYPES
@@ -40,6 +42,7 @@ import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.ABSTRACT_DELEGATE
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.ABSTRACT_FUNCTION_IN_NON_ABSTRACT_CLASS
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.ABSTRACT_FUNCTION_WITH_BODY
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.ABSTRACT_MEMBER_NOT_IMPLEMENTED
+import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.ABSTRACT_MEMBER_NOT_IMPLEMENTED_BY_ENUM_ENTRY
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.ABSTRACT_PROPERTY_IN_NON_ABSTRACT_CLASS
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.ABSTRACT_PROPERTY_IN_PRIMARY_CONSTRUCTOR_PARAMETERS
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.ABSTRACT_PROPERTY_WITH_GETTER
@@ -136,6 +139,7 @@ import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.CONST_VAL_WITH_GE
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.CONST_VAL_WITH_NON_CONST_INITIALIZER
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.CONTRACT_NOT_ALLOWED
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.CREATING_AN_INSTANCE_OF_ABSTRACT_CLASS
+import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.NO_CONSTRUCTOR
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.CYCLE_IN_ANNOTATION_PARAMETER
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.CYCLIC_CONSTRUCTOR_DELEGATION_CALL
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.CYCLIC_GENERIC_UPPER_BOUND
@@ -147,6 +151,7 @@ import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.DATA_CLASS_VARARG
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.DATA_CLASS_WITHOUT_PARAMETERS
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.DATA_OBJECT_CUSTOM_EQUALS_OR_HASH_CODE
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.DECLARATION_CANT_BE_INLINED
+import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.DEFAULT_ARGUMENTS_IN_EXPECT_WITH_ACTUAL_TYPEALIAS
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.DEFINITELY_NON_NULLABLE_AS_REIFIED
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.DELEGATED_MEMBER_HIDES_SUPERTYPE_OVERRIDE
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.DELEGATED_PROPERTY_INSIDE_VALUE_CLASS
@@ -223,6 +228,9 @@ import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.FLOAT_LITERAL_OUT
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.DEPRECATED_BINARY_MOD
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.EXPOSED_PROPERTY_TYPE_IN_CONSTRUCTOR
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.DEPRECATED_IDENTITY_EQUALS
+import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.EXPECTED_EXTERNAL_DECLARATION
+import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.EXPECTED_TAILREC_FUNCTION
+import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.EXPECT_CLASS_AS_FUNCTION
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.FORBIDDEN_BINARY_MOD
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.FORBIDDEN_IDENTITY_EQUALS
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.FORBIDDEN_IDENTITY_EQUALS_WARNING
@@ -290,9 +298,12 @@ import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.INITIALIZER_TYPE_
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.INLINE_CLASS_CONSTRUCTOR_WRONG_PARAMETERS_SIZE
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.INLINE_PROPERTY_WITH_BACKING_FIELD
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.INLINE_SUSPEND_FUNCTION_TYPE_UNSUPPORTED
+import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.INNER_CLASS_CONSTRUCTOR_NO_RECEIVER
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.INNER_CLASS_INSIDE_VALUE_CLASS
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.INNER_CLASS_OF_GENERIC_THROWABLE_SUBCLASS
+import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.INNER_ON_TOP_LEVEL_SCRIPT_CLASS
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.INSTANCE_ACCESS_BEFORE_SUPER_CALL
+import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.INTERFACE_AS_FUNCTION
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.INTERFACE_WITH_SUPERCLASS
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.INT_LITERAL_OUT_OF_RANGE
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.INVALID_CHARACTERS
@@ -337,6 +348,12 @@ import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.MULTIPLE_VARARG_P
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.MULTI_FIELD_VALUE_CLASS_PRIMARY_CONSTRUCTOR_DEFAULT_PARAMETER
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.MUST_BE_INITIALIZED
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.MUST_BE_INITIALIZED_OR_BE_ABSTRACT
+import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.MUST_BE_INITIALIZED_OR_BE_ABSTRACT_WARNING
+import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.MUST_BE_INITIALIZED_OR_BE_FINAL
+import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.MUST_BE_INITIALIZED_OR_BE_FINAL_WARNING
+import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.MUST_BE_INITIALIZED_OR_FINAL_OR_ABSTRACT
+import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.MUST_BE_INITIALIZED_OR_FINAL_OR_ABSTRACT_WARNING
+import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.MUST_BE_INITIALIZED_WARNING
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.NAMED_ARGUMENTS_NOT_ALLOWED
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.NAMED_PARAMETER_NOT_FOUND
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.NAME_FOR_AMBIGUOUS_PARAMETER
@@ -458,7 +475,6 @@ import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.REDUNDANT_ANNOTAT
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.REDUNDANT_CALL_OF_CONVERSION_METHOD
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.REDUNDANT_EXPLICIT_BACKING_FIELD
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.REDUNDANT_EXPLICIT_TYPE
-import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.REDUNDANT_INLINE_SUSPEND_FUNCTION_TYPE
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.REDUNDANT_LABEL_WARNING
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.REDUNDANT_MODALITY_MODIFIER
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.REDUNDANT_MODIFIER
@@ -585,6 +601,7 @@ import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.USELESS_VARARG_ON
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.VALUE_CLASS_CANNOT_BE_CLONEABLE
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.VALUE_CLASS_CANNOT_BE_RECURSIVE
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.VALUE_CLASS_CANNOT_EXTEND_CLASSES
+import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.VALUE_CLASS_CANNOT_HAVE_CONTEXT_RECEIVERS
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.VALUE_CLASS_CANNOT_IMPLEMENT_INTERFACE_BY_DELEGATION
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.VALUE_CLASS_CONSTRUCTOR_NOT_FINAL_READ_ONLY_PARAMETER
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors.VALUE_CLASS_EMPTY_CONSTRUCTOR
@@ -691,7 +708,7 @@ object FirErrorsDefaultMessages : BaseDiagnosticRendererFactory() {
         map.put(NULL_FOR_NONNULL_TYPE, "Null can not be a value of a non-null type")
 
         // Unresolved
-        map.put(INVISIBLE_REFERENCE, "Symbol {0} is invisible", SYMBOL)
+        map.put(INVISIBLE_REFERENCE, "Cannot access ''{0}'': it is {1} in {2}", SYMBOL, VISIBILITY, NAME_OF_DECLARATION_OR_FILE)
         map.put(
             INVISIBLE_SETTER,
             "Cannot access ''{0}'': it is {1} in {2}",
@@ -699,6 +716,7 @@ object FirErrorsDefaultMessages : BaseDiagnosticRendererFactory() {
             VISIBILITY,
             NAME_OF_CONTAINING_DECLARATION_OR_FILE
         )
+        map.put(INNER_ON_TOP_LEVEL_SCRIPT_CLASS, "Top level script class cannot be inner.")
         map.put(UNRESOLVED_REFERENCE, "Unresolved reference: {0}", NULLABLE_STRING)
         map.put(UNRESOLVED_IMPORT, "Unresolved reference: {0}", NULLABLE_STRING) // &
         map.put(UNRESOLVED_LABEL, "Unresolved label")
@@ -722,16 +740,20 @@ object FirErrorsDefaultMessages : BaseDiagnosticRendererFactory() {
             TO_STRING
         )
         map.put(CREATING_AN_INSTANCE_OF_ABSTRACT_CLASS, "Cannot create an instance of an abstract class")
+        map.put(NO_CONSTRUCTOR, "This type does not have a constructor.")
         map.put(FUNCTION_CALL_EXPECTED, "Function invocation ''{0}({1})'' expected", TO_STRING, FUNCTION_PARAMETERS)
         map.put(
             FUNCTION_EXPECTED,
             "Expression ''{0}'' of type {1} cannot be invoked as a function. The function ''invoke()'' is not found", TO_STRING, RENDER_TYPE
         )
+        map.put(INTERFACE_AS_FUNCTION, "Interface ''{0}'' does not have constructors.", SYMBOL)
+        map.put(EXPECT_CLASS_AS_FUNCTION, "Expected class ''{0}'' does not have default constructor.", SYMBOL)
         map.put(
-            RESOLUTION_TO_CLASSIFIER,
-            "Constructor of the inner class {0} can only be called with a receiver of the containing class",
+            INNER_CLASS_CONSTRUCTOR_NO_RECEIVER,
+            "Constructor of the inner class ''{0}'' can only be called with a receiver of the containing class",
             SYMBOL
         )
+        map.put(RESOLUTION_TO_CLASSIFIER, "Resolution to the classifier ''{0}'' is not appropriate here.", SYMBOL)
         map.put(
             AMBIGUOUS_ALTERED_ASSIGN,
             "Multiple extensions tried to alter this assignment at the same time. Extensions: {0}",
@@ -1237,7 +1259,7 @@ object FirErrorsDefaultMessages : BaseDiagnosticRendererFactory() {
             SMARTCAST_IMPOSSIBLE,
             "Smart cast to ''{0}'' is impossible, because ''{1}'' is a {2}",
             RENDER_TYPE,
-            FIR,
+            CALLEE_NAME,
             TO_STRING,
             NOT_RENDERED
         )
@@ -1350,8 +1372,7 @@ object FirErrorsDefaultMessages : BaseDiagnosticRendererFactory() {
         )
         map.put(
             INVALID_DEFAULT_FUNCTIONAL_PARAMETER_FOR_INLINE,
-            "Invalid default value for inline parameter: ''{0}''. Only lambdas, anonymous functions, and callable references are supported",
-            FIR,
+            "Invalid default value for inline function parameter. Only lambdas, anonymous functions, and callable references are supported",
             DECLARATION_NAME
         )
         map.put(
@@ -1362,6 +1383,7 @@ object FirErrorsDefaultMessages : BaseDiagnosticRendererFactory() {
         map.put(TYPE_ARGUMENT_ON_TYPED_VALUE_CLASS_EQUALS, "Type arguments for typed value class equals must all be star projections")
         map.put(INNER_CLASS_INSIDE_VALUE_CLASS, "Value class cannot have inner classes")
         map.put(VALUE_CLASS_CANNOT_BE_CLONEABLE, "Value class cannot be Cloneable")
+        map.put(VALUE_CLASS_CANNOT_HAVE_CONTEXT_RECEIVERS, "Value classes cannot have context receivers")
         map.put(
             ANNOTATION_ON_ILLEGAL_MULTI_FIELD_VALUE_CLASS_TYPED_TARGET,
             "Annotations on ''{0}'' of multi-field value class type are not supported",
@@ -1410,6 +1432,12 @@ object FirErrorsDefaultMessages : BaseDiagnosticRendererFactory() {
             "{0} is not abstract and does not implement abstract member {1}",
             RENDER_CLASS_OR_OBJECT,
             DECLARATION_NAME
+        )
+        map.put(
+            ABSTRACT_MEMBER_NOT_IMPLEMENTED_BY_ENUM_ENTRY,
+            "''{0}'' does not implement abstract members: {1}.",
+            SYMBOL,
+            SYMBOLS,
         )
         map.put(
             ABSTRACT_CLASS_MEMBER_NOT_IMPLEMENTED,
@@ -1629,7 +1657,14 @@ object FirErrorsDefaultMessages : BaseDiagnosticRendererFactory() {
         map.put(TYPECHECKER_HAS_RUN_INTO_RECURSIVE_PROBLEM, "Type checking has run into a recursive problem. Easiest workaround: specify types of your declarations explicitly")
 
         map.put(MUST_BE_INITIALIZED, "Property must be initialized")
+        map.put(MUST_BE_INITIALIZED_WARNING, "Property must be initialized. This warning will become an error in future releases.")
+        map.put(MUST_BE_INITIALIZED_OR_BE_FINAL, "Property must be initialized or be final")
+        map.put(MUST_BE_INITIALIZED_OR_BE_FINAL_WARNING, "Property must be initialized or be final. This warning will become an error in future releases.")
         map.put(MUST_BE_INITIALIZED_OR_BE_ABSTRACT, "Property must be initialized or be abstract")
+        map.put(MUST_BE_INITIALIZED_OR_BE_ABSTRACT_WARNING, "Property must be initialized or be abstract. This warning will become an error in future releases.")
+        map.put(MUST_BE_INITIALIZED_OR_FINAL_OR_ABSTRACT, "Property must be initialized, be final, or be abstract")
+        map.put(MUST_BE_INITIALIZED_OR_FINAL_OR_ABSTRACT_WARNING, "Property must be initialized, be final, or be abstract. This warning will become an error in future releases.")
+
         map.put(EXTENSION_PROPERTY_MUST_HAVE_ACCESSORS_OR_BE_ABSTRACT, "Extension property must have accessors or be abstract")
         map.put(UNNECESSARY_LATEINIT, "Lateinit is unnecessary: definitely initialized in constructors")
 
@@ -1749,6 +1784,8 @@ object FirErrorsDefaultMessages : BaseDiagnosticRendererFactory() {
         map.put(EXPECTED_DELEGATED_PROPERTY, "Expected property cannot be delegated")
         map.put(EXPECTED_LATEINIT_PROPERTY, "Expected property cannot be lateinit")
         map.put(EXPECTED_PRIVATE_DECLARATION, "Expected declaration cannot be private")
+        map.put(EXPECTED_EXTERNAL_DECLARATION, "Expected declaration cannot be external")
+        map.put(EXPECTED_TAILREC_FUNCTION, "Expected function cannot have 'tailrec' modifier")
         map.put(SUPERTYPE_INITIALIZED_IN_EXPECTED_CLASS, "Expected classes cannot initialize supertypes")
         map.put(IMPLEMENTATION_BY_DELEGATION_IN_EXPECT_CLASS, "Implementation by delegation in expected classes is prohibited")
         map.put(ACTUAL_TYPE_ALIAS_NOT_TO_CLASS, "Right-hand side of actual type alias should be a class, not another type alias")
@@ -1767,6 +1804,13 @@ object FirErrorsDefaultMessages : BaseDiagnosticRendererFactory() {
         map.put(
             ACTUAL_FUNCTION_WITH_DEFAULT_ARGUMENTS,
             "Actual function cannot have default argument values, they should be declared in the expected function"
+        )
+        map.put(
+            DEFAULT_ARGUMENTS_IN_EXPECT_WITH_ACTUAL_TYPEALIAS,
+            "Default argument values inside expect declaration ''{0}'' are not allowed if it is actualized via typealias. " +
+                    "Possible fix is to remove default argument values in members:{1}",
+            DECLARATION_NAME,
+            SYMBOLS_ON_NEWLINE_WITH_INDENT,
         )
         map.put(
             ACTUAL_ANNOTATION_CONFLICTING_DEFAULT_ARGUMENT_VALUE,
@@ -1859,36 +1903,37 @@ object FirErrorsDefaultMessages : BaseDiagnosticRendererFactory() {
         map.put(LEAKED_IN_PLACE_LAMBDA, "Leaked in-place lambda: {0}", SYMBOL)
         map.put(FirErrors.WRONG_IMPLIES_CONDITION, "Wrong implies condition")
         map.put(UNREACHABLE_CODE, "Unreachable code", NOT_RENDERED, NOT_RENDERED)
-        map.put(SENSELESS_COMPARISON, "Condition ''{0}'' is always ''{1}''", FIR, TO_STRING)
+        map.put(SENSELESS_COMPARISON, "Condition is always ''{0}''", TO_STRING)
         map.put(SENSELESS_NULL_IN_WHEN, "Expression under 'when' is never equal to null")
 
         // Nullability
         map.put(USELESS_CALL_ON_NOT_NULL, "Unsafe call on not null")
         map.put(
             UNSAFE_CALL,
-            "Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type {0}",
+            "Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type ''{0}''.",
             RENDER_TYPE,
-            NOT_RENDERED,
+            NOT_RENDERED
         )
         map.put(
             UNSAFE_IMPLICIT_INVOKE_CALL,
-            "Reference has a nullable type ''{0}'', use explicit \"?.invoke\" to make a function-like call instead.",
+            "Reference has a nullable type ''{0}'', use explicit ''?.invoke'' to make a function-like call instead.",
             RENDER_TYPE
         )
         map.put(
             UNSAFE_INFIX_CALL,
-            "Infix call corresponds to a dot-qualified call ''{0}.{1}({2})'' which is not allowed on a nullable receiver ''{0}''. " +
-                    "Use ''?.''-qualified call instead",
-            FIR,
-            TO_STRING,
-            FIR,
+            "Infix call is not allowed on a nullable receiver of type ''{0}''. Use ''?.''-qualified call instead.",
+            RENDER_TYPE,
+            NOT_RENDERED,
+            NOT_RENDERED,
+            NOT_RENDERED,
         )
         map.put(
             UNSAFE_OPERATOR_CALL,
-            "Operator call corresponds to a dot-qualified call ''{0}.{1}({2})'' which is not allowed on a nullable receiver ''{0}''. ",
-            FIR,
-            TO_STRING,
-            FIR,
+            "Operator call is not allowed on a nullable receiver of type ''{0}''. Use ''?.''-qualified call instead.",
+            RENDER_TYPE,
+            NOT_RENDERED,
+            NOT_RENDERED,
+            NOT_RENDERED,
         )
         map.put(UNNECESSARY_NOT_NULL_ASSERTION, "Unnecessary non-null assertion (!!) on a non-null receiver of type {0}", RENDER_TYPE)
         map.put(NOT_NULL_ASSERTION_ON_LAMBDA_EXPRESSION, "Non-null assertion (!!) is called on a lambda expression")
@@ -2129,7 +2174,7 @@ object FirErrorsDefaultMessages : BaseDiagnosticRendererFactory() {
         )
         map.put(
             PRIVATE_CLASS_MEMBER_FROM_INLINE,
-            "Non-private inline function cannot access members of private classes: ''{1}''",
+            "Non-private inline function ''{1}'' cannot access members of private classes: ''{0}''",
             SYMBOL,
             SYMBOL
         )
@@ -2152,11 +2197,6 @@ object FirErrorsDefaultMessages : BaseDiagnosticRendererFactory() {
         map.put(
             INLINE_SUSPEND_FUNCTION_TYPE_UNSUPPORTED,
             "Suspend inline lambda parameters of non-suspend function type are not supported. Add 'noinline' or 'crossinline' modifier."
-        )
-
-        map.put(
-            REDUNDANT_INLINE_SUSPEND_FUNCTION_TYPE,
-            "Redundant 'suspend' modifier: lambda parameters of suspend function type uses existing continuation."
         )
 
         map.put(

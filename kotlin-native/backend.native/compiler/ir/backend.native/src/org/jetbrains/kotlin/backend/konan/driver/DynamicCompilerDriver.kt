@@ -45,6 +45,7 @@ internal class DynamicCompilerDriver : CompilerDriver() {
                         CompilerOutputKind.DYNAMIC_CACHE -> produceBinary(engine, config, environment)
                         CompilerOutputKind.STATIC_CACHE -> produceBinary(engine, config, environment)
                         CompilerOutputKind.PRELIMINARY_CACHE -> TODO()
+                        CompilerOutputKind.TEST_BUNDLE -> produceBundle(engine, config, environment)
                     }
                 }
             }
@@ -103,9 +104,13 @@ internal class DynamicCompilerDriver : CompilerDriver() {
         if (frontendOutput is FirOutput.ShouldNotGenerateCode) return null
         require(frontendOutput is FirOutput.Full)
 
-        val fir2IrOutput = engine.runFir2Ir(frontendOutput)
-        engine.runK2SpecialBackendChecks(fir2IrOutput)
-        return engine.runFirSerializer(fir2IrOutput)
+        return if (environment.configuration.getBoolean(KonanConfigKeys.METADATA_KLIB)) {
+            engine.runFirSerializer(frontendOutput)
+        } else {
+            val fir2IrOutput = engine.runFir2Ir(frontendOutput)
+            engine.runK2SpecialBackendChecks(fir2IrOutput)
+            engine.runFir2IrSerializer(fir2IrOutput)
+        }
     }
 
     private fun serializeKlibK1(
@@ -148,6 +153,26 @@ internal class DynamicCompilerDriver : CompilerDriver() {
             llvmModule?.let { LLVMDisposeModule(it) }
             LLVMContextDispose(llvmContext)
         }
+    }
+
+    /**
+     * Produce a bundle that is a directory with code and resources.
+     * It consists of
+     * - Info.plist
+     * - Binary without an entry point.
+     *
+     * See https://developer.apple.com/library/archive/documentation/CoreFoundation/Conceptual/CFBundles/AboutBundles/AboutBundles.html
+     */
+    private fun produceBundle(engine: PhaseEngine<PhaseContext>, config: KonanConfig, environment: KotlinCoreEnvironment) {
+        require(config.target.family.isAppleFamily)
+        require(config.produce == CompilerOutputKind.TEST_BUNDLE)
+
+        val frontendOutput = engine.runFrontend(config, environment) ?: return
+        engine.runPhase(CreateTestBundlePhase, frontendOutput)
+        val psiToIrOutput = engine.runPsiToIr(frontendOutput, isProducingLibrary = false)
+        require(psiToIrOutput is PsiToIrOutput.ForBackend)
+        val backendContext = createBackendContext(config, frontendOutput, psiToIrOutput)
+        engine.runBackend(backendContext, psiToIrOutput.irModule)
     }
 
     private fun createBackendContext(

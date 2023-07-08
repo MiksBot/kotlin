@@ -28,14 +28,14 @@ import org.jetbrains.kotlin.name.SpecialNames
 import org.jetbrains.kotlin.types.TypeCheckerState
 import org.jetbrains.kotlin.types.TypeSystemCommonBackendContext
 import org.jetbrains.kotlin.types.Variance
-import org.jetbrains.kotlin.ir.types.makeNotNull as irMakeNotNull
-import org.jetbrains.kotlin.ir.types.makeNullable as irMakeNullable
-import org.jetbrains.kotlin.ir.types.isMarkedNullable as irIsMarkedNullable
 import org.jetbrains.kotlin.types.model.*
+import org.jetbrains.kotlin.utils.compactIfPossible
 import org.jetbrains.kotlin.utils.memoryOptimizedFilterIsInstance
 import org.jetbrains.kotlin.utils.memoryOptimizedMap
-import org.jetbrains.kotlin.utils.compactIfPossible
+import org.jetbrains.kotlin.ir.types.isMarkedNullable as irIsMarkedNullable
 import org.jetbrains.kotlin.ir.types.isPrimitiveType as irTypePredicates_isPrimitiveType
+import org.jetbrains.kotlin.ir.types.makeNotNull as irMakeNotNull
+import org.jetbrains.kotlin.ir.types.makeNullable as irMakeNullable
 
 interface IrTypeSystemContext : TypeSystemContext, TypeSystemCommonSuperTypesContext, TypeSystemCommonBackendContext {
 
@@ -513,7 +513,7 @@ interface IrTypeSystemContext : TypeSystemContext, TypeSystemCommonSuperTypesCon
             else null
         } else {
             val parent = owner.parent
-            if (parent is IrPackageFragment && parent.fqName == StandardNames.BUILT_INS_PACKAGE_FQ_NAME)
+            if (parent is IrPackageFragment && parent.packageFqName == StandardNames.BUILT_INS_PACKAGE_FQ_NAME)
                 owner.name.asString()
             else null
         }
@@ -524,7 +524,7 @@ interface IrTypeSystemContext : TypeSystemContext, TypeSystemCommonSuperTypesCon
         while (true) {
             val parent = declaration.parent
             if (parent is IrPackageFragment) {
-                return parent.fqName.startsWith(StandardNames.BUILT_INS_PACKAGE_NAME)
+                return parent.packageFqName.startsWith(StandardNames.BUILT_INS_PACKAGE_NAME)
             }
             declaration = parent as? IrDeclaration ?: return false
         }
@@ -588,6 +588,26 @@ interface IrTypeSystemContext : TypeSystemContext, TypeSystemCommonSuperTypesCon
 
     override fun KotlinTypeMarker.isTypeVariableType(): Boolean {
         return false
+    }
+
+    override fun typeSubstitutorByTypeConstructor(map: Map<TypeConstructorMarker, KotlinTypeMarker>): TypeSubstitutorMarker {
+        val typeParameters = mutableListOf<IrTypeParameterSymbol>()
+        val typeArguments = mutableListOf<IrTypeArgument>()
+        for ((key, value) in map) {
+            typeParameters += key as IrTypeParameterSymbol
+            typeArguments += value as IrTypeArgument
+        }
+        return IrTypeSubstitutor(typeParameters, typeArguments, irBuiltIns)
+    }
+
+    override fun createEmptySubstitutor(): TypeSubstitutorMarker {
+        return IrTypeSubstitutor(emptyList(), emptyList(), irBuiltIns)
+    }
+
+    override fun TypeSubstitutorMarker.safeSubstitute(type: KotlinTypeMarker): KotlinTypeMarker {
+        require(this is AbstractIrTypeSubstitutor)
+        require(type is IrType)
+        return substitute(type)
     }
 }
 

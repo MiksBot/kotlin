@@ -68,21 +68,7 @@ class BuildReportsService {
                 it.buildReportDir,
                 parameters.projectName,
                 it.includeMetricsInReport,
-                buildOperationRecords.mapNotNull {
-                    prepareData(
-                        taskResult = null,
-                        it.path,
-                        it.startTimeMs,
-                        it.totalTimeMs + it.startTimeMs,
-                        parameters.projectName,
-                        buildUuid,
-                        parameters.label,
-                        parameters.kotlinVersion,
-                        it,
-                        onlyKotlinTask = false,
-                        parameters.additionalTags
-                    )
-                },
+                transformOperationRecordsToCompileStatisticsData(buildOperationRecords, parameters, onlyKotlinTask = false),
                 parameters.startParameters,
                 failureMessages.filter { it.isNotEmpty() },
                 loggerAdapter
@@ -101,11 +87,32 @@ class BuildReportsService {
         executorService.shutdown()
     }
 
+    private fun transformOperationRecordsToCompileStatisticsData(
+        buildOperationRecords: Collection<BuildOperationRecord>,
+        parameters: BuildReportParameters,
+        onlyKotlinTask: Boolean,
+        metricsToShow: Set<String>? = null
+    ) = buildOperationRecords.mapNotNull {
+        prepareData(
+            taskResult = null,
+            it.path,
+            it.startTimeMs,
+            it.totalTimeMs + it.startTimeMs,
+            parameters.projectName,
+            buildUuid,
+            parameters.label,
+            parameters.kotlinVersion,
+            it,
+            onlyKotlinTask = onlyKotlinTask,
+            parameters.additionalTags,
+            metricsToShow = metricsToShow
+        )
+    }
+
     fun onFinish(
         event: TaskFinishEvent, buildOperation: BuildOperationRecord,
-        parameters: BuildReportParameters, buildScan: BuildScanExtensionHolder?
+        parameters: BuildReportParameters
     ) {
-        buildScan?.also { addBuildScanReport(event, buildOperation, parameters, it) }
         addHttpReport(event, buildOperation, parameters)
     }
 
@@ -177,7 +184,7 @@ class BuildReportsService {
 
     }
 
-    private fun addBuildScanReport(
+    internal fun addBuildScanReport(
         event: TaskFinishEvent,
         buildOperationRecord: BuildOperationRecord,
         parameters: BuildReportParameters,
@@ -197,6 +204,28 @@ class BuildReportsService {
         log.debug("Collect data takes $collectDataDuration: $compileStatData")
 
         compileStatData?.also {
+            addBuildScanReport(it, buildScanSettings.customValueLimit, buildScanExtension)
+        }
+    }
+
+    internal fun addBuildScanReport(
+        buildOperationRecords: Collection<BuildOperationRecord>,
+        parameters: BuildReportParameters,
+        buildScanExtension: BuildScanExtensionHolder
+    ) {
+        val buildScanSettings = parameters.reportingSettings.buildScanReportSettings ?: return
+
+        val (collectDataDuration, compileStatData) = measureTimeMillisWithResult {
+            transformOperationRecordsToCompileStatisticsData(
+                buildOperationRecords,
+                parameters,
+                onlyKotlinTask = true,
+                metricsToShow = buildScanSettings.metrics
+            )
+        }
+        log.debug("Collect data takes $collectDataDuration: $compileStatData")
+
+        compileStatData.forEach {
             addBuildScanReport(it, buildScanSettings.customValueLimit, buildScanExtension)
         }
     }
@@ -243,7 +272,7 @@ class BuildReportsService {
             }
         log.warn("##### 'kotlin.experimental.tryK2' results (Kotlin/Native not checked) #####")
         if (tasksData.isEmpty()) {
-            log.warn("No Kotlin compilation tasks have run")
+            log.warn("No Kotlin compilation tasks have been run")
             log.warn("#####")
         } else {
             val tasksCountWithKotlin2 = tasksData.count {
@@ -254,7 +283,9 @@ class BuildReportsService {
             statsData.forEach { record ->
                 log.warn("${record.first}: ${record.second} language version")
             }
-            log.warn("##### $taskWithK2Percent% ($tasksCountWithKotlin2/${tasksData.count()}) tasks have compiled with Kotlin 2 #####")
+            log.warn(
+                "##### $taskWithK2Percent% ($tasksCountWithKotlin2/${tasksData.count()}) tasks have been compiled with Kotlin 2.0 #####"
+            )
         }
     }
 

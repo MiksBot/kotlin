@@ -5,6 +5,8 @@
 
 #pragma once
 
+#include <atomic>
+
 #include "GCScheduler.hpp"
 #include "Memory.h"
 #include "Types.h"
@@ -27,13 +29,10 @@ public:
     public:
         class Impl;
 
-        ThreadData(GC& gc, mm::ThreadData& threadData) noexcept;
+        ThreadData(GC& gc, gcScheduler::GCSchedulerThreadData& gcScheduler, mm::ThreadData& threadData) noexcept;
         ~ThreadData();
 
         Impl& impl() noexcept { return *impl_; }
-
-        void SafePointFunctionPrologue() noexcept;
-        void SafePointLoopBody() noexcept;
 
         void Schedule() noexcept;
         void ScheduleAndWaitFullGC() noexcept;
@@ -45,14 +44,15 @@ public:
         ObjHeader* CreateObject(const TypeInfo* typeInfo) noexcept;
         ArrayHeader* CreateArray(const TypeInfo* typeInfo, uint32_t elements) noexcept;
 
-        void OnStoppedForGC() noexcept;
         void OnSuspendForGC() noexcept;
+
+        void safePoint() noexcept;
 
     private:
         std_support::unique_ptr<Impl> impl_;
     };
 
-    GC() noexcept;
+    explicit GC(gcScheduler::GCScheduler& gcScheduler) noexcept;
     ~GC();
 
     Impl& impl() noexcept { return *impl_; }
@@ -60,8 +60,6 @@ public:
     static size_t GetAllocatedHeapSize(ObjHeader* object) noexcept;
 
     size_t GetTotalHeapObjectsSizeBytes() const noexcept;
-
-    gc::GCSchedulerConfig& gcSchedulerConfig() noexcept;
 
     void ClearForTests() noexcept;
 
@@ -73,9 +71,17 @@ public:
     static void processArrayInMark(void* state, ArrayHeader* array) noexcept;
     static void processFieldInMark(void* state, ObjHeader* field) noexcept;
 
+    // TODO: These should be moved into the scheduler.
+    int64_t Schedule() noexcept;
+    void WaitFinalizers(int64_t epoch) noexcept;
+    void ScheduleAndWaitFullGCWithFinalizers() noexcept { WaitFinalizers(Schedule()); }
+
 private:
     std_support::unique_ptr<Impl> impl_;
 };
+
+bool isMarked(ObjHeader* object) noexcept;
+OBJ_GETTER(tryRef, std::atomic<ObjHeader*>& object) noexcept;
 
 inline constexpr bool kSupportsMultipleMutators = true;
 

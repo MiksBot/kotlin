@@ -92,6 +92,12 @@ internal fun <T : IrElement> FirQualifiedAccessExpression.convertWithOffsets(
     return convertWithOffsets(this.calleeReference, f)
 }
 
+internal fun <T : IrElement> FirThisReceiverExpression.convertWithOffsets(
+    f: (startOffset: Int, endOffset: Int) -> T
+): T {
+    return source.convertWithOffsets(f)
+}
+
 internal fun <T : IrElement> FirStatement.convertWithOffsets(
     calleeReference: FirReference,
     f: (startOffset: Int, endOffset: Int) -> T
@@ -173,17 +179,24 @@ fun FirReference.toSymbolForCall(
     explicitReceiver: FirExpression?,
     preferGetter: Boolean = true,
     isDelegate: Boolean = false,
-    isReference: Boolean = false
+    isReference: Boolean = false,
 ): IrSymbol? {
     return when (this) {
-        is FirResolvedNamedReference ->
-            resolvedSymbol.toSymbolForCall(
+        is FirResolvedNamedReference -> {
+            var symbol = resolvedSymbol
+
+            if (symbol is FirCallableSymbol<*> && symbol.origin == FirDeclarationOrigin.SubstitutionOverride.CallSite) {
+                symbol = symbol.fir.unwrapUseSiteSubstitutionOverrides<FirCallableDeclaration>().symbol
+            }
+
+            symbol.toSymbolForCall(
                 dispatchReceiver,
                 preferGetter,
                 explicitReceiver,
                 isDelegate,
                 isReference
             )
+        }
 
         is FirThisReference -> {
             when (val boundSymbol = boundSymbol) {
@@ -193,7 +206,7 @@ fun FirReference.toSymbolForCall(
                     val property = declarationStorage.getIrPropertySymbol(boundSymbol).owner as? IrProperty
                     property?.let { conversionScope.parentAccessorOfPropertyFromStack(it) }?.symbol
                 }
-
+                is FirScriptSymbol -> declarationStorage.getCachedIrScript(boundSymbol.fir)?.thisReceiver?.symbol
                 else -> null
             }
         }
@@ -236,10 +249,7 @@ private fun FirCallableSymbol<*>.toSymbolForCall(
         }
         // Unbound callable reference to member (non-extension)
         isReference && fir.receiverParameter == null -> {
-            // TODO: remove runIf with StandardClassIds.Any comparison after fixing ValueClass::equals case (KT-54887)
-            runIf(containingClassLookupTag()?.classId != StandardClassIds.Any) {
-                (explicitReceiver as? FirResolvedQualifier)?.toLookupTag(session)
-            }
+            (explicitReceiver as? FirResolvedQualifier)?.toLookupTag(session)
         }
         else -> null
     }
@@ -576,10 +586,18 @@ internal fun IrDeclarationParent.declareThisReceiverParameter(
     explicitReceiver: FirReceiverParameter? = null,
 ): IrValueParameter {
     return symbolTable.irFactory.createValueParameter(
-        startOffset, endOffset, thisOrigin, IrValueParameterSymbolImpl(),
-        name, UNDEFINED_PARAMETER_INDEX, thisType,
-        varargElementType = null, isCrossinline = false, isNoinline = false,
-        isHidden = false, isAssignable = false
+        startOffset = startOffset,
+        endOffset = endOffset,
+        origin = thisOrigin,
+        name = name,
+        type = thisType,
+        isAssignable = false,
+        symbol = IrValueParameterSymbolImpl(),
+        index = UNDEFINED_PARAMETER_INDEX,
+        varargElementType = null,
+        isCrossinline = false,
+        isNoinline = false,
+        isHidden = false,
     ).apply {
         this.parent = this@declareThisReceiverParameter
         explicitReceiver?.let { annotationGenerator.generate(this, it) }

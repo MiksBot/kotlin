@@ -64,7 +64,7 @@ val commonSourceSetName = "common"
  * Configures common pom configuration parameters
  */
 fun Project.configureCommonPublicationSettingsForGradle(
-    signingRequired: Boolean
+    signingRequired: Boolean,
 ) {
     plugins.withId("maven-publish") {
         configureDefaultPublishing(signingRequired)
@@ -104,7 +104,13 @@ fun Project.excludeGradleCommonDependencies(sourceSet: SourceSet) {
     configurations[sourceSet.runtimeOnlyConfigurationName].excludeGradleCommonDependencies()
 }
 
-private val testPlugins = setOf("kotlin-gradle-plugin-api", "android-test-fixes", "gradle-warnings-detector", "kotlin-compiler-args-properties")
+private val testPlugins = setOf(
+    "kotlin-gradle-plugin-api",
+    "android-test-fixes",
+    "gradle-warnings-detector",
+    "kotlin-compiler-args-properties",
+    "kotlin-gradle-plugin",
+)
 
 /**
  * Common sources for all variants.
@@ -124,7 +130,7 @@ fun Project.createGradleCommonSourceSet(): SourceSet {
 
         dependencies {
             compileOnlyConfigurationName(kotlinStdlib())
-            "commonGradleApiCompileOnly"("dev.gradleplugins:gradle-api:8.0")
+            "commonGradleApiCompileOnly"("dev.gradleplugins:gradle-api:8.1")
             if (this@createGradleCommonSourceSet.name !in testPlugins) {
                 compileOnlyConfigurationName(project(":kotlin-gradle-plugin-api")) {
                     capabilities {
@@ -162,7 +168,7 @@ fun Project.createGradleCommonSourceSet(): SourceSet {
  */
 private fun Project.fixWiredSourceSetSecondaryVariants(
     wireSourceSet: SourceSet,
-    commonSourceSet: SourceSet
+    commonSourceSet: SourceSet,
 ) {
     configurations
         .matching {
@@ -220,7 +226,7 @@ private fun Project.fixWiredSourceSetSecondaryVariants(
  */
 fun Project.wireGradleVariantToCommonGradleVariant(
     wireSourceSet: SourceSet,
-    commonSourceSet: SourceSet
+    commonSourceSet: SourceSet,
 ) {
     wireSourceSet.compileClasspath += commonSourceSet.output
     wireSourceSet.runtimeClasspath += commonSourceSet.output
@@ -263,7 +269,7 @@ private const val FIXED_CONFIGURATION_SUFFIX = "WithFixedAttribute"
  * 'main' sources are used for minimal supported Gradle versions (6.7) up to Gradle 7.0.
  */
 fun Project.reconfigureMainSourcesSetForGradlePlugin(
-    commonSourceSet: SourceSet
+    commonSourceSet: SourceSet,
 ) {
     sourceSets.named(SourceSet.MAIN_SOURCE_SET_NAME) {
         plugins.withType<JavaGradlePluginPlugin>().configureEach {
@@ -350,7 +356,10 @@ fun Project.reconfigureMainSourcesSetForGradlePlugin(
                             tasks.named<JavaCompile>(compileJavaTaskName).get().apply {
                                 attribute(
                                     TargetJvmVersion.TARGET_JVM_VERSION_ATTRIBUTE,
-                                    targetCompatibility.toInt()
+                                    when (targetCompatibility) {
+                                        "1.8" -> 8
+                                        else -> targetCompatibility.toInt()
+                                    }
                                 )
                             }
                         }
@@ -365,9 +374,10 @@ fun Project.reconfigureMainSourcesSetForGradlePlugin(
                         TargetJvmVersion.TARGET_JVM_VERSION_ATTRIBUTE
                     )
                     if (attributes.keySet() != expectedAttributes) {
-                        error("Wrong set of attributes:\n" +
-                                      "  Expected: ${expectedAttributes.joinToString(", ")}\n" +
-                                      "  Actual: ${attributes.keySet().joinToString(", ") { "${it.name}=${attributes.getAttribute(it)}" }}"
+                        error(
+                            "Wrong set of attributes:\n" +
+                                    "  Expected: ${expectedAttributes.joinToString(", ")}\n" +
+                                    "  Actual: ${attributes.keySet().joinToString(", ") { "${it.name}=${attributes.getAttribute(it)}" }}"
                         )
                     }
 
@@ -409,7 +419,7 @@ fun Project.reconfigureMainSourcesSetForGradlePlugin(
 fun Project.createGradlePluginVariant(
     variant: GradlePluginVariant,
     commonSourceSet: SourceSet,
-    isGradlePlugin: Boolean = true
+    isGradlePlugin: Boolean = true,
 ): SourceSet {
     val variantSourceSet = sourceSets.create(variant.sourceSetName) {
         excludeGradleCommonDependencies(this)
@@ -530,7 +540,7 @@ fun Project.configureKotlinCompileTasksGradleCompatibility() {
 // Will allow combining outputs of multiple SourceSets
 fun Project.publishShadowedJar(
     sourceSet: SourceSet,
-    commonSourceSet: SourceSet
+    commonSourceSet: SourceSet,
 ) {
     val jarTask = tasks.named<Jar>(sourceSet.jarTaskName)
 
@@ -625,6 +635,14 @@ fun Project.configureDokkaPublication(
     shouldLinkGradleApi: Boolean = false,
     configurePublishingToKotlinlang: Boolean = false,
 ) {
+
+    val dokkaVersioningPluginVersion = "1.8.10"
+
+    dependencies {
+        implicitDependencies("org.jetbrains.dokka:javadoc-plugin:${DokkaVersion.version}")
+        implicitDependencies("org.jetbrains.dokka:versioning-plugin:$dokkaVersioningPluginVersion")
+    }
+
     if (!kotlinBuildProperties.publishGradlePluginsJavadoc) return
 
     plugins.apply("org.jetbrains.dokka")
@@ -680,7 +698,7 @@ fun Project.configureDokkaPublication(
 
             project.dependencies {
                 // Version is required due to https://github.com/Kotlin/dokka/issues/2812
-                "dokkaPlugin"("org.jetbrains.dokka:versioning-plugin:1.8.10")
+                "dokkaHtmlPlugin"("org.jetbrains.dokka:versioning-plugin:$dokkaVersioningPluginVersion")
             }
 
             tasks.register<DokkaTask>("dokkaKotlinlangDocumentation") {

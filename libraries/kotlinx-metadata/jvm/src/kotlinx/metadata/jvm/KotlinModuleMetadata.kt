@@ -16,6 +16,7 @@ import kotlinx.metadata.*
 import kotlinx.metadata.internal.accept
 import kotlinx.metadata.jvm.internal.IgnoreInApiDump
 import kotlinx.metadata.jvm.KotlinClassMetadata.Companion.COMPATIBLE_METADATA_VERSION
+import kotlinx.metadata.jvm.KotlinClassMetadata.Companion.throwIfNotCompatible
 import kotlinx.metadata.jvm.internal.wrapIntoMetadataExceptionWhenNeeded
 import kotlinx.metadata.jvm.internal.wrapWriteIntoIAE
 import org.jetbrains.kotlin.metadata.jvm.JvmModuleProtoBuf
@@ -28,26 +29,36 @@ import org.jetbrains.kotlin.metadata.jvm.deserialization.serializeToByteArray
  * Represents the parsed metadata of a Kotlin JVM module file.
  *
  * To create an instance of [KotlinModuleMetadata], load the contents of the `.kotlin_module` file into a byte array
- * and call [KotlinModuleMetadata.read].
+ * and call [KotlinModuleMetadata.read]. Then it is possible to transform the result into [KmModule] with [KotlinModuleMetadata.toKmModule].
+ *
+ * `.kotlin_module` file is produced per Kotlin compilation, and contains auxiliary information, such as a map of all single- and multi-file facades ([KmModule.packageParts]),
+ *  `@OptionalExpectation` declarations ([KmModule.optionalAnnotationClasses]), and module annotations ([KmModule.annotations).
  *
  * @property bytes the byte array representing the contents of a `.kotlin_module` file
  */
 @UnstableMetadataApi
-class KotlinModuleMetadata(@Suppress("MemberVisibilityCanBePrivate") val bytes: ByteArray) {
-    @get:IgnoreInApiDump
-    internal val data: ModuleMapping = ModuleMapping.loadModuleMapping(
-        bytes, javaClass.name,
-        skipMetadataVersionCheck = false,
-        isJvmPackageNameSupported = true
-    ) {
-        // TODO: report incorrect versions of modules
-    }
+class KotlinModuleMetadata private constructor(
+    private val bytes: ByteArray,
+    private val data: ModuleMapping,
+) {
+
+    /**
+     * Returns the [KmModule] representation of this metadata.
+     *
+     * Returns the same (mutable) [KmModule] instance every time.
+     */
+    public val kmModule: KmModule = KmModule().apply(this::accept)
 
     /**
      * Visits metadata of this module with a new [KmModule] instance and returns that instance.
      */
-    fun toKmModule(): KmModule =
-        KmModule().apply(this::accept)
+    @Deprecated(
+        "To avoid excessive copying, use .kmModule property instead. Note that it returns a view and not a copy.",
+        ReplaceWith("kmModule"),
+        DeprecationLevel.WARNING
+    )
+    fun toKmModule(): KmModule = KmModule().apply(kmModule::accept)
+
 
     /**
      * A [KmModuleVisitor] that generates the metadata of a Kotlin JVM module file.
@@ -96,12 +107,13 @@ class KotlinModuleMetadata(@Suppress("MemberVisibilityCanBePrivate") val bytes: 
          *   [KotlinClassMetadata.COMPATIBLE_METADATA_VERSION] by default
          */
         @Deprecated("Writer API is deprecated as excessive and cumbersome. Please use KotlinModuleMetadata.write(kmModule, metadataVersion)")
-        fun write(metadataVersion: IntArray = COMPATIBLE_METADATA_VERSION): KotlinModuleMetadata =
-            KotlinModuleMetadata(b.build().serializeToByteArray(JvmMetadataVersion(*metadataVersion), 0))
+        fun write(metadataVersion: IntArray = COMPATIBLE_METADATA_VERSION): ByteArray {
+            return b.build().serializeToByteArray(JvmMetadataVersion(*metadataVersion), 0)
+        }
     }
 
     /**
-     * Makes the given visitor visit metadata of this module file.
+     * Makes the given visitor visit the metadata of this module file.
      *
      * @param v the visitor that must visit this module file
      */
@@ -125,25 +137,27 @@ class KotlinModuleMetadata(@Suppress("MemberVisibilityCanBePrivate") val bytes: 
         v.visitEnd()
     }
 
+    /**
+     * Collection of methods for reading and writing [KotlinModuleMetadata].
+     */
     companion object {
         /**
          * Parses the given byte array with the .kotlin_module file content and returns the [KotlinModuleMetadata] instance,
          * or `null` if this byte array encodes a module with an unsupported metadata version.
          *
          * @throws IllegalArgumentException if an error happened while parsing the given byte array,
-         * which means that it's either not the content of a .kotlin_module file, or it has been corrupted.
+         * which means that it is either not the content of a `.kotlin_module` file, or it has been corrupted.
          */
         @JvmStatic
         @UnstableMetadataApi
-        fun read(bytes: ByteArray): KotlinModuleMetadata? {
+        fun read(bytes: ByteArray): KotlinModuleMetadata {
             return wrapIntoMetadataExceptionWhenNeeded {
-                val result = KotlinModuleMetadata(bytes)
-                when (result.data) {
-                    ModuleMapping.EMPTY -> null
-                    ModuleMapping.CORRUPTED ->
+                val result = dataFromBytes(bytes)
+                when (result) {
+                    ModuleMapping.EMPTY, ModuleMapping.CORRUPTED ->
                         throw InconsistentKotlinMetadataException("Data is not the content of a .kotlin_module file, or it has been corrupted.")
-                    else -> result
                 }
+                KotlinModuleMetadata(bytes, result)
             }
         }
 
@@ -156,8 +170,17 @@ class KotlinModuleMetadata(@Suppress("MemberVisibilityCanBePrivate") val bytes: 
          * @throws IllegalArgumentException if [kmModule] is not correct and cannot be written or if [metadataVersion] is not supported for writing.
          */
         @UnstableMetadataApi
-        fun write(kmModule: KmModule, metadataVersion: IntArray = COMPATIBLE_METADATA_VERSION): KotlinModuleMetadata = wrapWriteIntoIAE {
+        @JvmStatic
+        @JvmOverloads
+        fun write(kmModule: KmModule, metadataVersion: IntArray = COMPATIBLE_METADATA_VERSION): ByteArray = wrapWriteIntoIAE {
             Writer().also { kmModule.accept(it) }.write(metadataVersion)
+        }
+
+        private fun dataFromBytes(bytes: ByteArray): ModuleMapping {
+            return ModuleMapping.loadModuleMapping(
+                bytes, "KotlinModuleMetadata", skipMetadataVersionCheck = false,
+                isJvmPackageNameSupported = true, reportIncompatibleVersionError = ::throwIfNotCompatible
+            )
         }
     }
 }
@@ -215,7 +238,7 @@ abstract class KmModuleVisitor(private val delegate: KmModuleVisitor? = null) {
 }
 
 /**
- * Represents a Kotlin JVM module file.
+ * Represents a Kotlin JVM module file (`.kotlin_module` extension).
  */
 @UnstableMetadataApi
 class KmModule : KmModuleVisitor() {
@@ -226,7 +249,10 @@ class KmModule : KmModuleVisitor() {
 
     /**
      * Annotations on the module.
+     *
+     * Currently, Kotlin does not provide functionality to specify annotations on modules.
      */
+    @Deprecated("This list is always empty and will be removed", level = DeprecationLevel.WARNING)
     val annotations: MutableList<KmAnnotation> = ArrayList(0)
 
     /**

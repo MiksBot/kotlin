@@ -28,14 +28,14 @@ class K2NewMultiplatformIT : NewMultiplatformIT() {
     override fun defaultBuildOptions(): BuildOptions = super.defaultBuildOptions().copy(languageVersion = "2.0")
 }
 
-@Ignore
+@Disabled("Used for local testing only")
 class K2CommonizerIT : CommonizerIT() {
-    override fun defaultBuildOptions(): BuildOptions = super.defaultBuildOptions().copy(languageVersion = "2.0")
+    override val defaultBuildOptions: BuildOptions get() = super.defaultBuildOptions.copy(languageVersion = "2.0")
 }
 
 @Ignore
 class K2CommonizerHierarchicalIT : CommonizerHierarchicalIT() {
-    override fun defaultBuildOptions(): BuildOptions = super.defaultBuildOptions().copy(languageVersion = "2.0")
+    override val defaultBuildOptions: BuildOptions = super.defaultBuildOptions.copy(languageVersion = "2.0")
 }
 
 @MppGradlePluginTests
@@ -64,6 +64,17 @@ class CustomK2Tests : KGPBaseTest() {
     }
 
     @GradleTest
+    @DisplayName("HMPP compilation with JS target and old stdlib. KT-59151")
+    fun testHmppCompilationWithJsAndOldStdlib(gradleVersion: GradleVersion) {
+        with(project("k2-mpp-js-old-stdlib", gradleVersion, buildOptions = defaultBuildOptions.copy(languageVersion = "2.0"))) {
+            val taskToExecute = ":compileKotlinJs"
+            build(taskToExecute) {
+                assertTasksExecuted(taskToExecute)
+            }
+        }
+    }
+
+    @GradleTest
     @DisplayName("Native metadata of intermediate with reference to internal in common. KT-58219")
     fun nativeMetadataOfIntermediateWithReferenceToInternalInCommon(gradleVersion: GradleVersion) {
         with(project("k2-native-intermediate-metadata", gradleVersion, buildOptions = defaultBuildOptions.copy(languageVersion = "2.0"))) {
@@ -78,7 +89,31 @@ class CustomK2Tests : KGPBaseTest() {
     @GradleTest
     @DisplayName("Compiling shared native source with FirFakeOverrideGenerator referencing a common entity. KT-58145")
     fun kt581450MppNativeSharedCrash(gradleVersion: GradleVersion) {
-        with(project("kt-581450-mpp-native-shared-crash", gradleVersion, buildOptions = defaultBuildOptions.copy(languageVersion = "2.0"))) {
+        with(
+            project(
+                "kt-581450-mpp-native-shared-crash",
+                gradleVersion,
+                buildOptions = defaultBuildOptions.copy(languageVersion = "2.0")
+            )
+        ) {
+            val taskToExecute = ":compileNativeMainKotlinMetadata"
+            build(taskToExecute) {
+                assertTasksExecuted(taskToExecute)
+            }
+        }
+    }
+
+    @Disabled("disable until kotlin/native dependency is updated to include KT-58444")
+    @GradleTest
+    @DisplayName("Compiling shared native source with intrinsic initializer from common source set in Native-shared source set. KT-58444")
+    fun kt58444NativeSharedConstantIntrinsic(gradleVersion: GradleVersion) {
+        with(
+            project(
+                "kt-58444-native-shared-constant-intrinsic",
+                gradleVersion,
+                buildOptions = defaultBuildOptions.copy(languageVersion = "2.0"),
+            )
+        ) {
             val taskToExecute = ":compileNativeMainKotlinMetadata"
             build(taskToExecute) {
                 assertTasksExecuted(taskToExecute)

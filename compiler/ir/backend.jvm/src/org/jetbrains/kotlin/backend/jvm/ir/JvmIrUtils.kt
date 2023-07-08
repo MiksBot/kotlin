@@ -416,13 +416,15 @@ fun findSuperDeclaration(function: IrSimpleFunction, isSuperCall: Boolean, jvmDe
     return current
 }
 
+fun IrMemberAccessExpression<*>.getIntConstArgumentOrNull(i: Int) = getValueArgument(i)?.let {
+    if (it is IrConst<*> && it.kind == IrConstKind.Int)
+        it.value as Int
+    else
+        null
+}
+
 fun IrMemberAccessExpression<*>.getIntConstArgument(i: Int): Int =
-    getValueArgument(i)?.let {
-        if (it is IrConst<*> && it.kind == IrConstKind.Int)
-            it.value as Int
-        else
-            null
-    } ?: throw AssertionError("Value argument #$i should be an Int const: ${dump()}")
+    getIntConstArgumentOrNull(i) ?: throw AssertionError("Value argument #$i should be an Int const: ${dump()}")
 
 fun IrMemberAccessExpression<*>.getStringConstArgument(i: Int): String =
     getValueArgument(i)?.let {
@@ -475,7 +477,7 @@ val IrMemberWithContainerSource.parentClassId: ClassId?
 // Translated into IR-based terms from classifierDescriptor?.classId
 private val IrClass.classId: ClassId?
     get() = when (val parent = parent) {
-        is IrExternalPackageFragment -> ClassId(parent.fqName, name)
+        is IrExternalPackageFragment -> ClassId(parent.packageFqName, name)
         // TODO: there's `context.classNameOverride`; theoretically it's only relevant for top-level members,
         //       where `containerSource` is a `JvmPackagePartSource` anyway, but I'm not 100% sure.
         is IrClass -> parent.classId?.createNestedClassId(name)

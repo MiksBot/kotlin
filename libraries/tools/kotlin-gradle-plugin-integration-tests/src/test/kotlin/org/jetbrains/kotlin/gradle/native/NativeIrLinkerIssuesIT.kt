@@ -205,7 +205,7 @@ internal class NativeIrLinkerIssuesIT : KGPBaseTest() {
             localRepo = tempDir
         ) { kotlinNativeCompilerVersion ->
             """
-            |e: The symbol of unexpected type encountered during IR deserialization: IrTypeAliasPublicSymbolImpl, sample.liba/B|null[0]. IrClassifierSymbol is expected.
+            |e: The symbol of unexpected type encountered during IR deserialization: IrClassPublicSymbolImpl, sample.liba/B|null[0]. IrTypeAliasSymbol is expected.
             |
             |This could happen if there are two libraries, where one library was compiled against the different version of the other library than the one currently used in the project. Please check that the project configuration is correct and has consistent versions of dependencies.
             |
@@ -334,7 +334,8 @@ internal class NativeIrLinkerIssuesIT : KGPBaseTest() {
         nativeProject(
             directoryPrefix + "/" + projectName,
             gradleVersion = gradleVersion,
-            buildOptions = defaultBuildOptions.copy(nativeCacheKind = nativeCacheKind),
+            buildOptions = defaultBuildOptions.copy(
+                nativeOptions = defaultBuildOptions.nativeOptions.copy(cacheKind = nativeCacheKind)),
             localRepoDir = localRepo
         ) {
             block()

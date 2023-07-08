@@ -55,8 +55,8 @@ object FirCommonSessionFactory : FirAbstractSessionFactory() {
             registerExtraComponents = {
                 registerExtraComponents(it)
             },
-            createKotlinScopeProvider = { FirKotlinScopeProvider { _, declaredMemberScope, _, _, _ -> declaredMemberScope } },
-            createProviders = { session, builtinsModuleData, kotlinScopeProvider ->
+            createKotlinScopeProvider = { FirKotlinScopeProvider() },
+            createProviders = { session, builtinsModuleData, kotlinScopeProvider, syntheticFunctionInterfaceProvider ->
                 listOfNotNull(
                     MetadataSymbolProvider(
                         session,
@@ -73,6 +73,7 @@ object FirCommonSessionFactory : FirAbstractSessionFactory() {
                             resolvedKLibs.map { it.library }
                         )
                     },
+                    syntheticFunctionInterfaceProvider,
                     FirBuiltinSymbolProvider(session, builtinsModuleData, kotlinScopeProvider),
                     FirCloneableSymbolProvider(session, builtinsModuleData, kotlinScopeProvider),
                 )
@@ -109,8 +110,8 @@ object FirCommonSessionFactory : FirAbstractSessionFactory() {
                 registerExtraComponents(it)
             },
             registerExtraCheckers = {},
-            createKotlinScopeProvider = { FirKotlinScopeProvider { _, declaredMemberScope, _, _, _ -> declaredMemberScope } },
-            createProviders = { session, kotlinScopeProvider, symbolProvider, syntheticFunctionalInterfaceProvider, generatedSymbolsProvider, dependencies ->
+            createKotlinScopeProvider = { FirKotlinScopeProvider() },
+            createProviders = { session, kotlinScopeProvider, symbolProvider, generatedSymbolsProvider, dependencies ->
                 var symbolProviderForBinariesFromIncrementalCompilation: MetadataSymbolProvider? = null
                 incrementalCompilationContext?.let {
                     val precompiledBinariesPackagePartProvider = it.precompiledBinariesPackagePartProvider
@@ -133,7 +134,6 @@ object FirCommonSessionFactory : FirAbstractSessionFactory() {
                     *(incrementalCompilationContext?.previousFirSessionsSymbolProviders?.toTypedArray() ?: emptyArray()),
                     symbolProviderForBinariesFromIncrementalCompilation,
                     generatedSymbolsProvider,
-                    syntheticFunctionalInterfaceProvider,
                     *dependencies.toTypedArray(),
                 )
             }

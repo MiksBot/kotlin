@@ -14,7 +14,7 @@ data class Test1<T : Any?> {
   }
 
   fun copy(x: T = <this>.#x): Test1<T> {
-    return Test1<Any>(x = x)
+    return Test1<T>(x = x)
   }
 
   override operator fun equals(other: Any?): Boolean {
@@ -39,7 +39,7 @@ data class Test1<T : Any?> {
   }
 
   override fun toString(): String {
-    return "Test1(x=" + <this>.#x + ")"
+    return "Test1(" + "x=" + <this>.#x + ")"
   }
 
 }
@@ -60,7 +60,7 @@ data class Test2<T : Number> {
   }
 
   fun copy(x: T = <this>.#x): Test2<T> {
-    return Test2<Any>(x = x)
+    return Test2<T>(x = x)
   }
 
   override operator fun equals(other: Any?): Boolean {
@@ -82,7 +82,7 @@ data class Test2<T : Number> {
   }
 
   override fun toString(): String {
-    return "Test2(x=" + <this>.#x + ")"
+    return "Test2(" + "x=" + <this>.#x + ")"
   }
 
 }
@@ -103,7 +103,7 @@ data class Test3<T : Any?> {
   }
 
   fun copy(x: List<T> = <this>.#x): Test3<T> {
-    return Test3<Any>(x = x)
+    return Test3<T>(x = x)
   }
 
   override operator fun equals(other: Any?): Boolean {
@@ -125,7 +125,7 @@ data class Test3<T : Any?> {
   }
 
   override fun toString(): String {
-    return "Test3(x=" + <this>.#x + ")"
+    return "Test3(" + "x=" + <this>.#x + ")"
   }
 
 }
@@ -168,7 +168,7 @@ data class Test4 {
   }
 
   override fun toString(): String {
-    return "Test4(x=" + <this>.#x + ")"
+    return "Test4(" + "x=" + <this>.#x + ")"
   }
 
 }

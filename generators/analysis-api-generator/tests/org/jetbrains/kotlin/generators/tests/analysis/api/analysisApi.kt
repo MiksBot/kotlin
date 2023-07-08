@@ -24,6 +24,7 @@ import org.jetbrains.kotlin.analysis.api.impl.base.test.cases.components.importO
 import org.jetbrains.kotlin.analysis.api.impl.base.test.cases.components.multiplatformInfoProvider.AbstractExpectForActualTest
 import org.jetbrains.kotlin.analysis.api.impl.base.test.cases.components.psiTypeProvider.AbstractAnalysisApiExpressionPsiTypeProviderTest
 import org.jetbrains.kotlin.analysis.api.impl.base.test.cases.components.psiTypeProvider.AbstractAnalysisApiPsiTypeProviderTest
+import org.jetbrains.kotlin.analysis.api.impl.base.test.cases.components.referenceResolveProvider.AbstractIsImplicitCompanionReferenceTest
 import org.jetbrains.kotlin.analysis.api.impl.base.test.cases.components.scopeProvider.*
 import org.jetbrains.kotlin.analysis.api.impl.base.test.cases.components.signatureSubstitution.AbstractAnalysisApiSignatureContractsTest
 import org.jetbrains.kotlin.analysis.api.impl.base.test.cases.components.signatureSubstitution.AbstractAnalysisApiSignatureSubstitutionTest
@@ -42,10 +43,7 @@ import org.jetbrains.kotlin.analysis.api.impl.base.test.cases.components.typeInf
 import org.jetbrains.kotlin.analysis.api.impl.base.test.cases.components.typeProvider.AbstractAnalysisApiGetSuperTypesTest
 import org.jetbrains.kotlin.analysis.api.impl.base.test.cases.components.typeProvider.AbstractHasCommonSubtypeTest
 import org.jetbrains.kotlin.analysis.api.impl.base.test.cases.components.typeProvider.AbstractTypeReferenceTest
-import org.jetbrains.kotlin.analysis.api.impl.base.test.cases.references.AbstractReferenceResolveTest
-import org.jetbrains.kotlin.analysis.api.impl.base.test.cases.references.AbstractReferenceResolveWithResolveExtensionTest
-import org.jetbrains.kotlin.analysis.api.impl.base.test.cases.references.AbstractReferenceShortenerForWholeFileTest
-import org.jetbrains.kotlin.analysis.api.impl.base.test.cases.references.AbstractReferenceShortenerTest
+import org.jetbrains.kotlin.analysis.api.impl.base.test.cases.references.*
 import org.jetbrains.kotlin.analysis.api.impl.base.test.cases.symbols.*
 import org.jetbrains.kotlin.analysis.api.impl.base.test.cases.types.AbstractAnalysisApiSubstitutorsTest
 import org.jetbrains.kotlin.analysis.api.impl.base.test.cases.types.AbstractTypeByDeclarationReturnTypeTest
@@ -92,8 +90,12 @@ private fun AnalysisApiTestGroup.generateResolveExtensionsTests() {
                 frontendIs(FrontendKind.Fir) and
                 testModuleKindIs(TestModuleKind.Source)
     ) {
-        test(AbstractReferenceResolveWithResolveExtensionTest::class) {
+        test(AbstractSingleModuleReferenceResolveWithResolveExtensionTest::class) {
             model("referenceResolve")
+        }
+
+        test(AbstractMultiModuleReferenceResolveWithResolveExtensionTest::class) {
+            model("multiModule/referenceResolve")
         }
     }
 }
@@ -279,7 +281,7 @@ private fun AnalysisApiTestGroup.generateAnalysisApiComponentsTests() {
     component("importOptimizer") {
         test(
             AbstractAnalysisApiImportOptimizerTest::class,
-            filter = frontendIs(FrontendKind.Fir) and analysisSessionModeIs(AnalysisSessionMode.Normal),
+            filter = analysisSessionModeIs(AnalysisSessionMode.Normal),
         ) {
             model("analyseImports", pattern = TestGeneratorUtil.KT_WITHOUT_DOTS_IN_NAME)
         }
@@ -387,6 +389,13 @@ private fun AnalysisApiTestGroup.generateAnalysisApiComponentsTests() {
             test(AbstractSubstitutorBuilderTest::class) {
                 model("substitutorBuilder")
             }
+        }
+    }
+
+
+    component("referenceResolveProvider") {
+        test(AbstractIsImplicitCompanionReferenceTest::class) {
+            model("isImplicitReferenceToCompanion")
         }
     }
 

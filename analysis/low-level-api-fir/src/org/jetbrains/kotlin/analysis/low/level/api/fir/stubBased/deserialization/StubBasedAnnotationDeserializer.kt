@@ -52,7 +52,7 @@ class StubBasedAnnotationDeserializer(
     fun loadConstant(property: KtProperty, callableId: CallableId): FirExpression? {
         if (!property.hasModifier(KtTokens.CONST_KEYWORD)) return null
         constantCache[callableId]?.let { return it }
-        val propertyStub = property.stub as? KotlinPropertyStubImpl ?: return null
+        val propertyStub = (property.stub ?: loadStubByElement(property)) as? KotlinPropertyStubImpl ?: return null
         val constantValue = propertyStub.constantInitializer ?: return null
         return resolveValue(property, constantValue)
     }
@@ -60,15 +60,19 @@ class StubBasedAnnotationDeserializer(
     private fun deserializeAnnotation(
         ktAnnotation: KtAnnotationEntry
     ): FirAnnotation {
-        val userType =
-            ktAnnotation.getStubOrPsiChild(KtStubElementTypes.CONSTRUCTOR_CALLEE)?.getStubOrPsiChild(KtStubElementTypes.TYPE_REFERENCE)
-                ?.getStubOrPsiChild(KtStubElementTypes.USER_TYPE)!!
         return deserializeAnnotation(
             ktAnnotation,
-            userType.classId(),
-            (ktAnnotation.stub as? KotlinAnnotationEntryStubImpl)?.valueArguments,
+            getAnnotationClassId(ktAnnotation),
+            ((ktAnnotation.stub ?: loadStubByElement(ktAnnotation)) as? KotlinAnnotationEntryStubImpl)?.valueArguments,
             ktAnnotation.useSiteTarget?.getAnnotationUseSiteTarget()
         )
+    }
+
+    fun getAnnotationClassId(ktAnnotation: KtAnnotationEntry): ClassId {
+        val userType = ktAnnotation.getStubOrPsiChild(KtStubElementTypes.CONSTRUCTOR_CALLEE)
+            ?.getStubOrPsiChild(KtStubElementTypes.TYPE_REFERENCE)
+            ?.getStubOrPsiChild(KtStubElementTypes.USER_TYPE)!!
+        return userType.classId()
     }
 
     private fun deserializeAnnotation(

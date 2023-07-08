@@ -26,9 +26,21 @@ public class FirOldFrontendMPPDiagnosticsWithLightTreeTestGenerated extends Abst
     }
 
     @Test
+    @TestMetadata("expectAbstractToString.kt")
+    public void testExpectAbstractToString() throws Exception {
+        runTest("compiler/testData/diagnostics/tests/multiplatform/expectAbstractToString.kt");
+    }
+
+    @Test
     @TestMetadata("expectDataObject.kt")
     public void testExpectDataObject() throws Exception {
         runTest("compiler/testData/diagnostics/tests/multiplatform/expectDataObject.kt");
+    }
+
+    @Test
+    @TestMetadata("expectExternal.kt")
+    public void testExpectExternal() throws Exception {
+        runTest("compiler/testData/diagnostics/tests/multiplatform/expectExternal.kt");
     }
 
     @Test
@@ -41,6 +53,12 @@ public class FirOldFrontendMPPDiagnosticsWithLightTreeTestGenerated extends Abst
     @TestMetadata("expectObjectWithAbstractMember.kt")
     public void testExpectObjectWithAbstractMember() throws Exception {
         runTest("compiler/testData/diagnostics/tests/multiplatform/expectObjectWithAbstractMember.kt");
+    }
+
+    @Test
+    @TestMetadata("expectTailrec.kt")
+    public void testExpectTailrec() throws Exception {
+        runTest("compiler/testData/diagnostics/tests/multiplatform/expectTailrec.kt");
     }
 
     @Test
@@ -86,6 +104,18 @@ public class FirOldFrontendMPPDiagnosticsWithLightTreeTestGenerated extends Abst
     }
 
     @Test
+    @TestMetadata("kt58153.kt")
+    public void testKt58153() throws Exception {
+        runTest("compiler/testData/diagnostics/tests/multiplatform/kt58153.kt");
+    }
+
+    @Test
+    @TestMetadata("manyImplMemberNotImplemented.kt")
+    public void testManyImplMemberNotImplemented() throws Exception {
+        runTest("compiler/testData/diagnostics/tests/multiplatform/manyImplMemberNotImplemented.kt");
+    }
+
+    @Test
     @TestMetadata("manyInterfacesMemberNotImplemented.kt")
     public void testManyInterfacesMemberNotImplemented() throws Exception {
         runTest("compiler/testData/diagnostics/tests/multiplatform/manyInterfacesMemberNotImplemented.kt");
@@ -95,6 +125,12 @@ public class FirOldFrontendMPPDiagnosticsWithLightTreeTestGenerated extends Abst
     @TestMetadata("modifierApplicability.kt")
     public void testModifierApplicability() throws Exception {
         runTest("compiler/testData/diagnostics/tests/multiplatform/modifierApplicability.kt");
+    }
+
+    @Test
+    @TestMetadata("multipleExpectInterfacesImplementation.kt")
+    public void testMultipleExpectInterfacesImplementation() throws Exception {
+        runTest("compiler/testData/diagnostics/tests/multiplatform/multipleExpectInterfacesImplementation.kt");
     }
 
     @Test
@@ -134,9 +170,21 @@ public class FirOldFrontendMPPDiagnosticsWithLightTreeTestGenerated extends Abst
     }
 
     @Test
+    @TestMetadata("supertypeActualizationWithAny.kt")
+    public void testSupertypeActualizationWithAny() throws Exception {
+        runTest("compiler/testData/diagnostics/tests/multiplatform/supertypeActualizationWithAny.kt");
+    }
+
+    @Test
     @TestMetadata("varSetterVisibility.kt")
     public void testVarSetterVisibility() throws Exception {
         runTest("compiler/testData/diagnostics/tests/multiplatform/varSetterVisibility.kt");
+    }
+
+    @Test
+    @TestMetadata("widerVisibilityInActualClassifier.kt")
+    public void testWiderVisibilityInActualClassifier() throws Exception {
+        runTest("compiler/testData/diagnostics/tests/multiplatform/widerVisibilityInActualClassifier.kt");
     }
 
     @Nested
@@ -179,6 +227,12 @@ public class FirOldFrontendMPPDiagnosticsWithLightTreeTestGenerated extends Abst
         }
 
         @Test
+        @TestMetadata("constructorDefaultArgsViaActualTypealias.kt")
+        public void testConstructorDefaultArgsViaActualTypealias() throws Exception {
+            runTest("compiler/testData/diagnostics/tests/multiplatform/defaultArguments/constructorDefaultArgsViaActualTypealias.kt");
+        }
+
+        @Test
         @TestMetadata("expectedDeclaresDefaultArguments.kt")
         public void testExpectedDeclaresDefaultArguments() throws Exception {
             runTest("compiler/testData/diagnostics/tests/multiplatform/defaultArguments/expectedDeclaresDefaultArguments.kt");
@@ -194,6 +248,12 @@ public class FirOldFrontendMPPDiagnosticsWithLightTreeTestGenerated extends Abst
         @TestMetadata("expectedVsNonExpectedWithDefaults.kt")
         public void testExpectedVsNonExpectedWithDefaults() throws Exception {
             runTest("compiler/testData/diagnostics/tests/multiplatform/defaultArguments/expectedVsNonExpectedWithDefaults.kt");
+        }
+
+        @Test
+        @TestMetadata("methodDefaultArgsViaActualTypealias.kt")
+        public void testMethodDefaultArgsViaActualTypealias() throws Exception {
+            runTest("compiler/testData/diagnostics/tests/multiplatform/defaultArguments/methodDefaultArgsViaActualTypealias.kt");
         }
     }
 
@@ -668,6 +728,12 @@ public class FirOldFrontendMPPDiagnosticsWithLightTreeTestGenerated extends Abst
         @TestMetadata("flexibleTypes.kt")
         public void testFlexibleTypes() throws Exception {
             runTest("compiler/testData/diagnostics/tests/multiplatform/java/flexibleTypes.kt");
+        }
+
+        @Test
+        @TestMetadata("inheritedJavaMembers.kt")
+        public void testInheritedJavaMembers() throws Exception {
+            runTest("compiler/testData/diagnostics/tests/multiplatform/java/inheritedJavaMembers.kt");
         }
 
         @Test

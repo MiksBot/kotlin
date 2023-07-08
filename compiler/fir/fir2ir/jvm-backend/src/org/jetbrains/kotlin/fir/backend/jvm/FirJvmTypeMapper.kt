@@ -7,6 +7,7 @@ package org.jetbrains.kotlin.fir.backend.jvm
 
 import org.jetbrains.kotlin.builtins.StandardNames
 import org.jetbrains.kotlin.builtins.functions.BuiltInFunctionArity
+import org.jetbrains.kotlin.builtins.functions.FunctionTypeKind
 import org.jetbrains.kotlin.builtins.jvm.JavaToKotlinClassMap
 import org.jetbrains.kotlin.codegen.signature.JvmSignatureWriter
 import org.jetbrains.kotlin.codegen.state.KotlinTypeMapper
@@ -81,7 +82,9 @@ class FirJvmTypeMapper(val session: FirSession) : FirSessionComponent {
 
         override fun getClassInternalName(typeConstructor: TypeConstructorMarker): String {
             require(typeConstructor is ConeClassLikeLookupTag)
-            return typeConstructor.classId.asString().replace(".", "$").replace("/", ".")
+            val classId = typeConstructor.classId
+            val name = if (classId.isLocal) safeShortClassName(classId) else classId.asString()
+            return name.replace(".", "$").replace("/", ".")
         }
 
         override fun getScriptInternalName(typeConstructor: TypeConstructorMarker): String =
@@ -175,8 +178,9 @@ class FirJvmTypeMapper(val session: FirSession) : FirSessionComponent {
             val parameters = classifier?.typeParameters.orEmpty().map { it.symbol }
             val arguments = type.arguments
 
-            if ((defaultType.isBasicFunctionType(session) && arguments.size > BuiltInFunctionArity.BIG_ARITY)
-                || defaultType.isReflectFunctionType(session)
+            if ((defaultType.functionTypeKind(session).let { it == FunctionTypeKind.Function || it == FunctionTypeKind.SuspendFunction } &&
+                        (arguments.size > BuiltInFunctionArity.BIG_ARITY)) ||
+                defaultType.isReflectFunctionType(session)
             ) {
                 writeGenericArguments(sw, listOf(arguments.last()), listOf(parameters.last()), mode)
                 return
@@ -228,7 +232,11 @@ class FirJvmTypeMapper(val session: FirSession) : FirSessionComponent {
         val result = runUnless(classId.isLocal) {
             classId.asSingleFqName().toUnsafe().let { JavaToKotlinClassMap.mapKotlinToJava(it)?.shortClassName?.asString() }
         }
-        return result ?: SpecialNames.safeIdentifier(classId.shortClassName).identifier
+        return result ?: safeShortClassName(classId)
+    }
+
+    private fun safeShortClassName(classId: ClassId): String {
+        return SpecialNames.safeIdentifier(classId.shortClassName).identifier
     }
 }
 

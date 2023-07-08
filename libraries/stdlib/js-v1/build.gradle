@@ -1,5 +1,5 @@
 plugins {
-    id "com.github.node-gradle.node" version "3.0.1"
+    id "com.github.node-gradle.node" version "5.0.0"
 }
 
 description = 'Kotlin Standard Library for JS'
@@ -7,8 +7,8 @@ description = 'Kotlin Standard Library for JS'
 apply plugin: 'kotlin-platform-js'
 apply plugin: 'idea'
 
-configurePublishing(project)
-configureJavadocJar()
+RepoArtifacts.publish(project)
+RepoArtifacts.javadocJar(project)
 
 configurations {
     sources
@@ -71,7 +71,7 @@ dependencies {
     testApi project(':kotlin-test:kotlin-test-js')
 }
 
-task prepareComparableSource(type: Copy) {
+tasks.register("prepareComparableSource", Copy) {
     def fs = services.get(FileSystemOperations)
     doFirst {
         fs.delete {
@@ -84,7 +84,7 @@ task prepareComparableSource(type: Copy) {
     into builtinsSrcDir2
 }
 
-task prepareBuiltinsSources(type: Copy) {
+tasks.register("prepareBuiltinsSources", Copy) {
     def fs = services.get(FileSystemOperations)
     doFirst {
         fs.delete {
@@ -134,7 +134,6 @@ compileKotlin2Js {
             "-opt-in=kotlin.RequiresOptIn",
             "-opt-in=kotlin.ExperimentalMultiplatform",
             "-opt-in=kotlin.contracts.ExperimentalContracts",
-            "-XXLanguage:+RangeUntilOperator",
             "-Xforce-deprecated-legacy-compiler-usage"
         ]
     }
@@ -148,12 +147,11 @@ compileTestKotlin2Js {
             "-opt-in=kotlin.ExperimentalUnsignedTypes",
             "-opt-in=kotlin.ExperimentalStdlibApi",
             "-opt-in=kotlin.io.encoding.ExperimentalEncodingApi",
-            "-XXLanguage:+RangeUntilOperator",
         ]
     }
 }
 
-task compileJs(type: NoDebugJavaExec) {
+tasks.register("compileJs", NoDebugJavaExec) {
     dependsOn compileBuiltinsKotlin2Js, compileKotlin2Js
     inputs.files(compileBuiltinsKotlin2Js.outputs.files).withPathSensitivity(PathSensitivity.RELATIVE)
     inputs.files(compileKotlin2Js.outputs.files).withPathSensitivity(PathSensitivity.RELATIVE)
@@ -246,9 +244,10 @@ jar {
     enabled false
 }
 
-task libraryJarWithoutIr(type: Jar, dependsOn: compileJs) {
+tasks.register("libraryJarWithoutIr", Jar) {
+    dependsOn(compileJs)
     archiveClassifier = null
-    manifestAttributes(manifest, project, 'Main')
+    LibrariesCommon.manifestAttributes(project, manifest, 'Main')
     destinationDirectory = file("$buildDir/lib/dist")
 
     // TODO: Use standard implementation title after js stdlib detector becomes more flexible (KT-17655)
@@ -267,7 +266,8 @@ task libraryJarWithoutIr(type: Jar, dependsOn: compileJs) {
     filesMatching("*.*") { it.mode = 0b110100100 } // KTI-401
 }
 
-task libraryJarWithIr(type: Zip, dependsOn: libraryJarWithoutIr) {
+tasks.register("libraryJarWithIr", Zip) {
+    dependsOn(libraryJarWithoutIr)
     archiveExtension = "jar"
     destinationDirectory = file("$buildDir/libs")
 
@@ -285,7 +285,8 @@ task libraryJarWithIr(type: Zip, dependsOn: libraryJarWithoutIr) {
 
 jar.dependsOn(libraryJarWithIr)
 
-task sourcesJar(type: Jar, dependsOn: compileJs) {
+tasks.register("sourcesJar", Jar) {
+    dependsOn(compileJs)
     dependsOn(":kotlin-stdlib-js-ir:sourcesJar")
     archiveClassifier.set('sources')
     includeEmptyDirs false
@@ -298,7 +299,7 @@ task sourcesJar(type: Jar, dependsOn: compileJs) {
     }
 }
 
-task distSourcesJar(type: Jar) {
+tasks.register("distSourcesJar", Jar) {
     dependsOn(sourcesJar, configurations.commonSources)
     destinationDirectory = file("$buildDir/lib/dist")
     archiveClassifier.set('sources')
@@ -326,24 +327,27 @@ artifacts {
 
 node {
     download = true
-    version = DependenciesKt.getNodejsVersion(project)
+    version = RepoDependencies.getNodejsVersion(project)
     nodeProjectDir = buildDir
 }
 
 // Otherwise Node ignores nodeModulesDir
-task deleteLegacyNodeModules(type: Delete) {
+tasks.register("deleteLegacyNodeModules", Delete) {
     delete "$projectDir/node_modules"
 }
 
-task installMocha(type: NpmTask, dependsOn: [deleteLegacyNodeModules]) {
+tasks.register("installMocha", NpmTask) {
+    dependsOn(deleteLegacyNodeModules)
     args = ['install', 'mocha@8.0.1']
 }
 
-task installTeamcityReporter(type: NpmTask, dependsOn: [deleteLegacyNodeModules]) {
+tasks.register("installTeamcityReporter", NpmTask) {
+    dependsOn(deleteLegacyNodeModules)
     args = ['install', 'mocha-teamcity-reporter@3.0.0']
 }
 
-task runMocha(type: NodeTask, dependsOn: [testClasses, installMocha, ':kotlin-test:kotlin-test-js:testClasses']) {
+tasks.register("runMocha", NodeTask) {
+    dependsOn(testClasses, installMocha, ':kotlin-test:kotlin-test-js:testClasses')
     script = file("${buildDir}/node_modules/mocha/bin/mocha")
 
     if (project.hasProperty("teamcity")) {
@@ -363,8 +367,6 @@ task runMocha(type: NodeTask, dependsOn: [testClasses, installMocha, ':kotlin-te
         it.workingDir = buildDir
     }
 }
-
-test.dependsOn runMocha
 
 tasks.withType(org.jetbrains.kotlin.gradle.dsl.KotlinJsCompile) {
     kotlinOptions.freeCompilerArgs += "-Xforce-deprecated-legacy-compiler-usage"

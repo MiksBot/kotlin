@@ -3,7 +3,7 @@
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
-@file:Suppress("DuplicatedCode")
+@file:Suppress("DuplicatedCode", "unused")
 
 package org.jetbrains.kotlin.fir.expressions.impl
 
@@ -29,7 +29,7 @@ import org.jetbrains.kotlin.fir.builder.toMutableOrEmpty
 
 internal class FirErrorAnnotationCallImpl(
     override val source: KtSourceElement?,
-    override val useSiteTarget: AnnotationUseSiteTarget?,
+    override var useSiteTarget: AnnotationUseSiteTarget?,
     override var annotationTypeRef: FirTypeRef,
     override var typeArguments: MutableOrEmptyList<FirTypeProjection>,
     override var argumentList: FirArgumentList,
@@ -78,6 +78,10 @@ internal class FirErrorAnnotationCallImpl(
     override fun replaceTypeRef(newTypeRef: FirTypeRef) {}
 
     override fun replaceAnnotations(newAnnotations: List<FirAnnotation>) {}
+
+    override fun replaceUseSiteTarget(newUseSiteTarget: AnnotationUseSiteTarget?) {
+        useSiteTarget = newUseSiteTarget
+    }
 
     override fun replaceAnnotationTypeRef(newAnnotationTypeRef: FirTypeRef) {
         annotationTypeRef = newAnnotationTypeRef

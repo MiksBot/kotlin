@@ -77,6 +77,13 @@ public interface Errors {
 
     DiagnosticFactory0<KtElement> EXPLICIT_BACKING_FIELDS_UNSUPPORTED = DiagnosticFactory0.create(ERROR);
 
+    DiagnosticFactory1<PsiElement, String> UNSUPPORTED_INHERITANCE_FROM_JAVA_MEMBER_REFERENCING_KOTLIN_FUNCTION = DiagnosticFactory1.create(ERROR);
+    DiagnosticFactory0<PsiElement> UNSUPPORTED_SEALED_WHEN = DiagnosticFactory0.create(ERROR);
+    DiagnosticFactory0<PsiElement> UNSUPPORTED_SEALED_FUN_INTERFACE = DiagnosticFactory0.create(ERROR);
+    DiagnosticFactory0<PsiElement> UNSUPPORTED_SUSPEND_TEST = DiagnosticFactory0.create(ERROR);
+    DiagnosticFactory0<PsiElement> UNSUPPORTED_REFERENCES_TO_VARIABLES_AND_PARAMETERS = DiagnosticFactory0.create(ERROR);
+    DiagnosticFactory0<PsiElement> UNSUPPORTED_CLASS_LITERALS_WITH_EMPTY_LHS = DiagnosticFactory0.create(ERROR);
+
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     // Generic errors/warnings: applicable in many contexts
@@ -673,7 +680,14 @@ public interface Errors {
     DiagnosticFactory0<KtProperty> PROPERTY_WITH_NO_TYPE_NO_INITIALIZER = DiagnosticFactory0.create(ERROR, DECLARATION_SIGNATURE);
 
     DiagnosticFactory0<KtProperty> MUST_BE_INITIALIZED = DiagnosticFactory0.create(ERROR, DECLARATION_SIGNATURE);
+    DiagnosticFactory0<KtProperty> MUST_BE_INITIALIZED_WARNING = DiagnosticFactory0.create(WARNING, DECLARATION_SIGNATURE);
+    DiagnosticFactory0<KtProperty> MUST_BE_INITIALIZED_OR_BE_FINAL = DiagnosticFactory0.create(ERROR, DECLARATION_SIGNATURE);
+    DiagnosticFactory0<KtProperty> MUST_BE_INITIALIZED_OR_BE_FINAL_WARNING = DiagnosticFactory0.create(WARNING, DECLARATION_SIGNATURE);
     DiagnosticFactory0<KtProperty> MUST_BE_INITIALIZED_OR_BE_ABSTRACT = DiagnosticFactory0.create(ERROR, DECLARATION_SIGNATURE);
+    DiagnosticFactory0<KtProperty> MUST_BE_INITIALIZED_OR_BE_ABSTRACT_WARNING = DiagnosticFactory0.create(WARNING, DECLARATION_SIGNATURE);
+    DiagnosticFactory0<KtProperty> MUST_BE_INITIALIZED_OR_FINAL_OR_ABSTRACT = DiagnosticFactory0.create(ERROR, DECLARATION_SIGNATURE);
+    DiagnosticFactory0<KtProperty> MUST_BE_INITIALIZED_OR_FINAL_OR_ABSTRACT_WARNING = DiagnosticFactory0.create(WARNING, DECLARATION_SIGNATURE);
+
     DiagnosticFactory0<KtProperty> EXTENSION_PROPERTY_MUST_HAVE_ACCESSORS_OR_BE_ABSTRACT =
             DiagnosticFactory0.create(ERROR, DECLARATION_SIGNATURE);
     DiagnosticFactory0<KtProperty> UNNECESSARY_LATEINIT = DiagnosticFactory0.create(WARNING, LATEINIT_MODIFIER);
@@ -783,6 +797,8 @@ public interface Errors {
     DiagnosticFactory0<PsiElement> EXPECTED_LATEINIT_PROPERTY = DiagnosticFactory0.create(ERROR);
     DiagnosticFactory0<PsiElement> SUPERTYPE_INITIALIZED_IN_EXPECTED_CLASS = DiagnosticFactory0.create(ERROR);
     DiagnosticFactory0<PsiElement> EXPECTED_PRIVATE_DECLARATION = DiagnosticFactory0.create(ERROR);
+    DiagnosticFactory0<PsiElement> EXPECTED_EXTERNAL_DECLARATION = DiagnosticFactory0.create(ERROR);
+    DiagnosticFactory0<PsiElement> EXPECTED_TAILREC_FUNCTION = DiagnosticFactory0.create(ERROR);
     DiagnosticFactory0<KtDelegatedSuperTypeEntry> IMPLEMENTATION_BY_DELEGATION_IN_EXPECT_CLASS = DiagnosticFactory0.create(ERROR);
 
     DiagnosticFactory0<KtTypeAlias> ACTUAL_TYPE_ALIAS_NOT_TO_CLASS = DiagnosticFactory0.create(ERROR, DECLARATION_SIGNATURE);
@@ -791,6 +807,7 @@ public interface Errors {
     DiagnosticFactory0<KtTypeAlias> ACTUAL_TYPE_ALIAS_WITH_USE_SITE_VARIANCE = DiagnosticFactory0.create(ERROR, DECLARATION_SIGNATURE);
     DiagnosticFactory0<KtTypeAlias> ACTUAL_TYPE_ALIAS_WITH_COMPLEX_SUBSTITUTION = DiagnosticFactory0.create(ERROR, DECLARATION_SIGNATURE);
     DiagnosticFactory0<PsiElement> ACTUAL_FUNCTION_WITH_DEFAULT_ARGUMENTS = DiagnosticFactory0.create(ERROR);
+    DiagnosticFactory2<KtNamedDeclaration, ClassDescriptor, Collection<FunctionDescriptor>> DEFAULT_ARGUMENTS_IN_EXPECT_WITH_ACTUAL_TYPEALIAS = DiagnosticFactory2.create(ERROR);
     DiagnosticFactory1<PsiElement, ValueParameterDescriptor> ACTUAL_ANNOTATION_CONFLICTING_DEFAULT_ARGUMENT_VALUE =
             DiagnosticFactory1.create(ERROR);
 

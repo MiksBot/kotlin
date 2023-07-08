@@ -534,7 +534,7 @@ abstract class CommonCompilerArguments : CommonToolArguments() {
 
     @Argument(
         value = "-Xuse-fir-lt",
-        description = "Compile using LightTree parser with Front-end IR. Warning: this feature is far from being production-ready"
+        description = "Compile using LightTree parser with Front-end IR"
     )
     var useFirLT = true
         set(value) {
@@ -868,7 +868,11 @@ abstract class CommonCompilerArguments : CommonToolArguments() {
             if (internalArguments.isNotEmpty()) {
                 configureLanguageFeaturesFromInternalArgs(collector)
             }
+
+            configureExtraLanguageFeatures(this)
         }
+
+    protected open fun configureExtraLanguageFeatures(map: HashMap<LanguageFeature, LanguageFeature.State>) {}
 
     private fun HashMap<LanguageFeature, LanguageFeature.State>.configureLanguageFeaturesFromInternalArgs(collector: MessageCollector) {
         val featuresThatForcePreReleaseBinaries = mutableListOf<LanguageFeature>()

@@ -18,6 +18,7 @@ import org.jetbrains.kotlin.cli.jvm.compiler.EnvironmentConfigFiles
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
 import org.jetbrains.kotlin.config.CommonConfigurationKeys
 import org.jetbrains.kotlin.config.CompilerConfiguration
+import org.jetbrains.kotlin.config.LanguageFeature
 import org.jetbrains.kotlin.konan.blackboxtest.support.*
 import org.jetbrains.kotlin.konan.blackboxtest.support.TestCase.WithTestRunnerExtras
 import org.jetbrains.kotlin.konan.blackboxtest.support.runner.TestRunChecks
@@ -26,7 +27,6 @@ import org.jetbrains.kotlin.konan.blackboxtest.support.util.*
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.psi.*
-import org.jetbrains.kotlin.psi.addRemoveModifier.addAnnotationEntry
 import org.jetbrains.kotlin.psi.psiUtil.getChildOfType
 import org.jetbrains.kotlin.psi.psiUtil.getChildrenOfType
 import org.jetbrains.kotlin.resolve.ImportPath
@@ -74,8 +74,8 @@ internal class ExtTestCaseGroupProvider : TestCaseGroupProvider, TestDisposable(
                     generatedSources = settings.get(),
                     customKlibs = settings.get(),
                     pipelineType = settings.get(),
+                    testMode = settings.get(),
                     timeouts = settings.get(),
-                    memoryModel = settings.get(),
                 )
 
                 if (extTestDataFile.isRelevant)
@@ -100,8 +100,8 @@ private class ExtTestDataFile(
     private val generatedSources: GeneratedSources,
     private val customKlibs: CustomKlibs,
     private val pipelineType: PipelineType,
+    private val testMode: TestMode,
     private val timeouts: Timeouts,
-    private val memoryModel: MemoryModel
 ) {
     private val structure by lazy {
         val allSourceTransformers: ExternalSourceTransformers = if (customSourceTransformers.isNullOrEmpty())
@@ -141,11 +141,13 @@ private class ExtTestDataFile(
     val isRelevant: Boolean =
         isCompatibleTarget(TargetBackend.NATIVE, testDataFile) // Checks TARGET_BACKEND/DONT_TARGET_EXACT_BACKEND directives.
                 && !isIgnoredTarget(pipelineType, testDataFile, TargetBackend.NATIVE) // Checks IGNORE_BACKEND directives.
-                && (memoryModel != MemoryModel.LEGACY || !isIgnoredTarget(pipelineType, testDataFile, TargetBackend.NATIVE_WITH_LEGACY_MM)) // Checks IGNORE_BACKEND directives.
                 && testDataFileSettings.languageSettings.none { it in INCOMPATIBLE_LANGUAGE_SETTINGS }
                 && INCOMPATIBLE_DIRECTIVES.none { it in structure.directives }
                 && structure.directives[API_VERSION_DIRECTIVE] !in INCOMPATIBLE_API_VERSIONS
                 && structure.directives[LANGUAGE_VERSION_DIRECTIVE] !in INCOMPATIBLE_LANGUAGE_VERSIONS
+                && !(testDataFileSettings.languageSettings.contains("+${LanguageFeature.MultiPlatformProjects.name}")
+                     && pipelineType == PipelineType.K2
+                     && testMode == TestMode.ONE_STAGE_MULTI_MODULE)
 
     private fun isIgnoredTarget(pipelineType: PipelineType, testDataFile: File, backend: TargetBackend): Boolean {
         return when (pipelineType) {
@@ -179,10 +181,6 @@ private class ExtTestDataFile(
 
     fun createTestCase(settings: Settings, sharedModules: ThreadSafeCache<String, TestModule.Shared?>): TestCase {
         assertTrue(isRelevant)
-
-        if (settings.get<MemoryModel>() == MemoryModel.LEGACY) {
-            makeObjectsMutable()
-        }
 
         val definitelyStandaloneTest = settings.get<ForcedStandaloneTestKind>().value
         val isStandaloneTest = definitelyStandaloneTest || determineIfStandaloneTest()
@@ -219,25 +217,6 @@ private class ExtTestDataFile(
         }
 
         isStandaloneTest
-    }
-
-    /** Annotate all objects and companion objects with [THREAD_LOCAL_ANNOTATION] to make them mutable. */
-    private fun makeObjectsMutable() = with(structure) {
-        filesToTransform.forEach { handler ->
-            handler.accept(object : KtTreeVisitorVoid() {
-                override fun visitObjectDeclaration(objectDeclaration: KtObjectDeclaration) {
-                    if (!objectDeclaration.isObjectLiteral()) {
-                        // FIXME: find only those that have vars inside
-                        addAnnotationEntry(
-                            objectDeclaration,
-                            handler.psiFactory.createAnnotationEntry(THREAD_LOCAL_ANNOTATION)
-                        ).ensureSurroundedByWhiteSpace()
-                    }
-
-                    super.visitObjectDeclaration(objectDeclaration)
-                }
-            })
-        }
     }
 
     /**
@@ -564,6 +543,7 @@ private class ExtTestDataFile(
             "-ProhibitAssigningSingleElementsToVarargsInNamedForm", // Prohibit these assignments
             "-ProhibitDataClassesOverridingCopy",                   // Prohibit as no longer supported
             "-ProhibitOperatorMod",                                 // Prohibit as no longer supported
+            "-ProhibitIllegalValueParameterUsageInDefaultArguments",  // Allow only legal values
             "-UseBuilderInferenceOnlyIfNeeded",                     // Run only default one
             "-UseCorrectExecutionOrderForVarargArguments"           // Run only correct one
         )
@@ -580,8 +560,6 @@ private class ExtTestDataFile(
 
         private fun Directives.multiValues(key: String, predicate: (String) -> Boolean = { true }): Set<String> =
             listValues(key)?.flatMap { it.split(' ') }?.filter(predicate)?.toSet().orEmpty()
-
-        private const val THREAD_LOCAL_ANNOTATION = "@kotlin.native.ThreadLocal"
 
         private val BOX_FUNCTION_NAME = Name.identifier("box")
         private val OPT_IN_ANNOTATION_NAME = Name.identifier("OptIn")

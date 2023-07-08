@@ -38,6 +38,10 @@ internal class MissingDeclarationStubGenerator(private val builtIns: IrBuiltIns)
 
     private var declarationsToPatch = arrayListOf<IrDeclaration>()
 
+    private val stubbedSymbols = hashSetOf<IrSymbol>()
+
+    val allStubbedSymbols: Set<IrSymbol> get() = stubbedSymbols
+
     fun grabDeclarationsToPatch(): Collection<IrDeclaration> {
         val result = declarationsToPatch
         declarationsToPatch = arrayListOf()
@@ -46,6 +50,8 @@ internal class MissingDeclarationStubGenerator(private val builtIns: IrBuiltIns)
 
     override fun getDeclaration(symbol: IrSymbol): IrDeclaration {
         require(!symbol.isBound)
+
+        stubbedSymbols.add(symbol)
 
         return when (symbol) {
             is IrClassSymbol -> generateClass(symbol)
@@ -63,11 +69,11 @@ internal class MissingDeclarationStubGenerator(private val builtIns: IrBuiltIns)
             startOffset = UNDEFINED_OFFSET,
             endOffset = UNDEFINED_OFFSET,
             origin = PartiallyLinkedDeclarationOrigin.MISSING_DECLARATION,
-            symbol = symbol,
             name = symbol.guessName(),
-            kind = ClassKind.CLASS,
             visibility = DescriptorVisibilities.DEFAULT_VISIBILITY,
-            modality = Modality.OPEN
+            symbol = symbol,
+            kind = ClassKind.CLASS,
+            modality = Modality.OPEN,
         ).apply {
             setCommonParent()
             createImplicitParameterDeclarationWithWrappedDescriptor()
@@ -75,22 +81,22 @@ internal class MissingDeclarationStubGenerator(private val builtIns: IrBuiltIns)
     }
 
     private fun generateSimpleFunction(symbol: IrSimpleFunctionSymbol): IrSimpleFunction {
-        return builtIns.irFactory.createFunction(
+        return builtIns.irFactory.createSimpleFunction(
             startOffset = UNDEFINED_OFFSET,
             endOffset = UNDEFINED_OFFSET,
             origin = PartiallyLinkedDeclarationOrigin.MISSING_DECLARATION,
-            symbol = symbol,
             name = symbol.guessName(),
             visibility = DescriptorVisibilities.DEFAULT_VISIBILITY,
-            modality = Modality.FINAL,
-            returnType = builtIns.nothingType,
             isInline = false,
-            isExternal = false,
+            isExpect = false,
+            returnType = builtIns.nothingType,
+            modality = Modality.FINAL,
+            symbol = symbol,
             isTailrec = false,
             isSuspend = false,
             isOperator = false,
             isInfix = false,
-            isExpect = false
+            isExternal = false
         ).setCommonParent()
     }
 
@@ -99,14 +105,14 @@ internal class MissingDeclarationStubGenerator(private val builtIns: IrBuiltIns)
             startOffset = UNDEFINED_OFFSET,
             endOffset = UNDEFINED_OFFSET,
             origin = PartiallyLinkedDeclarationOrigin.MISSING_DECLARATION,
-            symbol = symbol,
             name = SpecialNames.INIT,
             visibility = DescriptorVisibilities.DEFAULT_VISIBILITY,
-            returnType = builtIns.nothingType,
             isInline = false,
-            isExternal = false,
-            isPrimary = false,
             isExpect = false,
+            returnType = builtIns.nothingType,
+            symbol = symbol,
+            isPrimary = false,
+            isExternal = false,
         ).setCommonParent()
     }
 
@@ -115,10 +121,10 @@ internal class MissingDeclarationStubGenerator(private val builtIns: IrBuiltIns)
             startOffset = UNDEFINED_OFFSET,
             endOffset = UNDEFINED_OFFSET,
             origin = PartiallyLinkedDeclarationOrigin.MISSING_DECLARATION,
-            symbol = symbol,
             name = symbol.guessName(),
             visibility = DescriptorVisibilities.DEFAULT_VISIBILITY,
             modality = Modality.FINAL,
+            symbol = symbol,
             isVar = false,
             isConst = false,
             isLateinit = false,
@@ -133,8 +139,8 @@ internal class MissingDeclarationStubGenerator(private val builtIns: IrBuiltIns)
             startOffset = UNDEFINED_OFFSET,
             endOffset = UNDEFINED_OFFSET,
             origin = PartiallyLinkedDeclarationOrigin.MISSING_DECLARATION,
+            name = symbol.guessName(),
             symbol = symbol,
-            name = symbol.guessName()
         ).setCommonParent()
     }
 
@@ -142,12 +148,12 @@ internal class MissingDeclarationStubGenerator(private val builtIns: IrBuiltIns)
         return builtIns.irFactory.createTypeAlias(
             startOffset = UNDEFINED_OFFSET,
             endOffset = UNDEFINED_OFFSET,
-            symbol = symbol,
+            origin = PartiallyLinkedDeclarationOrigin.MISSING_DECLARATION,
             name = symbol.guessName(),
             visibility = DescriptorVisibilities.DEFAULT_VISIBILITY,
-            expandedType = builtIns.nothingType,
+            symbol = symbol,
             isActual = true,
-            origin = PartiallyLinkedDeclarationOrigin.MISSING_DECLARATION,
+            expandedType = builtIns.nothingType,
         ).setCommonParent()
     }
 

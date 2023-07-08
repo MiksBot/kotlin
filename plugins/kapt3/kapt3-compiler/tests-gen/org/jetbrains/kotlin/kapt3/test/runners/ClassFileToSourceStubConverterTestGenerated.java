@@ -92,6 +92,12 @@ public class ClassFileToSourceStubConverterTestGenerated extends AbstractClassFi
     }
 
     @Test
+    @TestMetadata("anonymousObjectInEnumSuperConstructor.kt")
+    public void testAnonymousObjectInEnumSuperConstructor() throws Exception {
+        runTest("plugins/kapt3/kapt3-compiler/testData/converter/anonymousObjectInEnumSuperConstructor.kt");
+    }
+
+    @Test
     @TestMetadata("comments.kt")
     public void testComments() throws Exception {
         runTest("plugins/kapt3/kapt3-compiler/testData/converter/comments.kt");
@@ -152,6 +158,12 @@ public class ClassFileToSourceStubConverterTestGenerated extends AbstractClassFi
     }
 
     @Test
+    @TestMetadata("delegateToList.kt")
+    public void testDelegateToList() throws Exception {
+        runTest("plugins/kapt3/kapt3-compiler/testData/converter/delegateToList.kt");
+    }
+
+    @Test
     @TestMetadata("delegatedProperties.kt")
     public void testDelegatedProperties() throws Exception {
         runTest("plugins/kapt3/kapt3-compiler/testData/converter/delegatedProperties.kt");
@@ -161,6 +173,12 @@ public class ClassFileToSourceStubConverterTestGenerated extends AbstractClassFi
     @TestMetadata("delegationAndCompanionObject.kt")
     public void testDelegationAndCompanionObject() throws Exception {
         runTest("plugins/kapt3/kapt3-compiler/testData/converter/delegationAndCompanionObject.kt");
+    }
+
+    @Test
+    @TestMetadata("delegationToAnonymousObject.kt")
+    public void testDelegationToAnonymousObject() throws Exception {
+        runTest("plugins/kapt3/kapt3-compiler/testData/converter/delegationToAnonymousObject.kt");
     }
 
     @Test

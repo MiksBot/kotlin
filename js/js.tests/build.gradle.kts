@@ -9,7 +9,7 @@ plugins {
     kotlin("jvm")
     kotlin("plugin.serialization")
     id("jps-compatible")
-    id("com.github.node-gradle.node") version "3.2.1"
+    id("com.github.node-gradle.node") version "5.0.0"
 }
 
 val nodeDir = buildDir.resolve("node")
@@ -37,6 +37,7 @@ dependencies {
     testApi(projectTests(":compiler:test-infrastructure-utils"))
     testApi(projectTests(":compiler:tests-compiler-utils"))
     testApi(projectTests(":compiler:tests-common-new"))
+    testImplementation(projectTests(":compiler:fir:analysis-tests"))
 
     testCompileOnly(project(":compiler:frontend"))
     testCompileOnly(project(":compiler:cli"))
@@ -108,8 +109,10 @@ val testDataDir = project(":js:js.translator").projectDir.resolve("testData")
 val typescriptTestsDir = testDataDir.resolve("typescript-export")
 
 val installTsDependencies = task<NpmTask>("installTsDependencies") {
+    val packageLockFile = testDataDir.resolve("package-lock.json")
     inputs.file(testDataDir.resolve("package.json"))
-    outputs.file(testDataDir.resolve("package-lock.json"))
+    outputs.file(packageLockFile)
+    outputs.upToDateWhen { packageLockFile.exists() }
 
     workingDir.set(testDataDir)
     args.set(listOf("install"))
@@ -171,17 +174,26 @@ fun generateJsExportOnFileTestFor(dir: String): Task = task<Copy>("generate-js-e
 }
 
 fun generateTypeScriptTestFor(dir: String): Task = task<NpmTask>("generate-ts-for-$dir") {
-    val baseDir = fileTree(typescriptTestsDir.resolve(dir))
+    val baseDir = typescriptTestsDir.resolve(dir)
+    val mainTsFile = fileTree(baseDir).files.find { it.name.endsWith("__main.ts") } ?: return@task
+    val mainJsFile = baseDir.resolve("${mainTsFile.nameWithoutExtension}.js")
 
     workingDir.set(testDataDir)
-    inputs.files(baseDir.include("*.ts"))
-    outputs.files(baseDir.include("*.js"))
+
+    inputs.file(mainTsFile)
+    outputs.file(mainJsFile)
+    outputs.upToDateWhen { mainJsFile.exists() }
+
     args.set(listOf("run", "generateTypeScriptTests", "--", "./typescript-export/$dir/tsconfig.json"))
 }
 
 val generateTypeScriptTests by parallel(
     beforeAll = installTsDependencies,
-    tasksToRun = typescriptTestsDir.listFiles { it: File -> it.isDirectory }
+    tasksToRun = typescriptTestsDir.listFiles { it: File ->
+        it.isDirectory &&
+                !it.path.endsWith("module-systems") &&
+                !it.path.endsWith("module-systems-in-exported-file")
+    }
         .map { generateTypeScriptTestFor(it.name) }
 )
 
@@ -319,8 +331,7 @@ fun Test.setUpBoxTests() {
 
     systemProperty("kotlin.js.test.root.out.dir", "$nodeDir/")
     systemProperty(
-        "overwrite.output", project.providers.gradleProperty("overwrite.output")
-            .forUseAtConfigurationTime().orNull ?: "false"
+        "overwrite.output", project.providers.gradleProperty("overwrite.output").orNull ?: "false"
     )
 
     forwardProperties()
@@ -376,7 +387,6 @@ projectTest("jsStdlibApiTest", parallel = true, maxHeapSizeMb = 4096) {
 
     include("org/jetbrains/kotlin/js/testOld/api/*")
     inputs.dir(rootDir.resolve("libraries/stdlib/api/js"))
-    inputs.dir(rootDir.resolve("libraries/stdlib/api/js-v1"))
 
     dependsOn(":kotlin-stdlib-js-ir:compileKotlinJs")
     systemProperty("kotlin.js.full.stdlib.path", "libraries/stdlib/js-ir/build/classes/kotlin/js/main")
@@ -408,8 +418,11 @@ val prepareNpmTestData by task<Copy> {
 }
 
 val npmInstall by tasks.getting(NpmTask::class) {
+    val packageLockFile = testDataDir.resolve("package-lock.json")
+
     inputs.file(nodeDir.resolve("package.json"))
-    outputs.file(testDataDir.resolve("package-lock.json"))
+    outputs.file(packageLockFile)
+    outputs.upToDateWhen { packageLockFile.exists() }
 
     workingDir.set(nodeDir)
     dependsOn(prepareNpmTestData)

@@ -5,7 +5,13 @@
 
 package org.jetbrains.kotlin.analysis.low.level.api.fir.stubBased.deserialization
 
+import com.intellij.extapi.psi.StubBasedPsiElementBase
+import com.intellij.openapi.util.Key
 import com.intellij.psi.PsiElement
+import com.intellij.psi.impl.source.tree.FileElement
+import com.intellij.psi.stubs.Stub
+import com.intellij.psi.stubs.StubTreeLoader
+import com.intellij.psi.util.PsiUtilCore
 import org.jetbrains.kotlin.KtFakeSourceElement
 import org.jetbrains.kotlin.KtRealPsiSourceElement
 import org.jetbrains.kotlin.descriptors.*
@@ -17,12 +23,15 @@ import org.jetbrains.kotlin.fir.declarations.comparators.FirMemberDeclarationCom
 import org.jetbrains.kotlin.fir.declarations.impl.FirResolvedDeclarationStatusImpl
 import org.jetbrains.kotlin.fir.declarations.utils.*
 import org.jetbrains.kotlin.fir.deserialization.*
+import org.jetbrains.kotlin.fir.resolve.transformers.setLazyPublishedVisibility
 import org.jetbrains.kotlin.fir.scopes.FirScopeProvider
 import org.jetbrains.kotlin.fir.symbols.impl.FirRegularClassSymbol
+import org.jetbrains.kotlin.fir.symbols.impl.FirTypeAliasSymbol
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.name.*
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.serialization.deserialization.descriptors.DeserializedContainerSource
+import java.lang.ref.WeakReference
 
 internal val KtModifierListOwner.visibility: Visibility
     get() = with(modifierList) {
@@ -44,6 +53,29 @@ internal val KtDeclaration.modality: Modality
             else -> Modality.FINAL
         }
     }
+
+private val STUBS_KEY = Key.create<WeakReference<List<Stub>?>>("STUBS")
+internal fun <S, T> loadStubByElement(ktElement: T): S? where T : StubBasedPsiElementBase<*>, T : KtElement {
+    ktElement.greenStub?.let {
+        @Suppress("UNCHECKED_CAST")
+        return it as S
+    }
+    val ktFile = ktElement.containingKtFile
+    require(ktFile.isCompiled) {
+        "Expected compiled file $ktFile"
+    }
+    val virtualFile = PsiUtilCore.getVirtualFile(ktFile) ?: return null
+    var stubList = ktFile.getUserData(STUBS_KEY)?.get()
+    if (stubList == null) {
+        val stubTree = StubTreeLoader.getInstance().readOrBuild(ktElement.project, virtualFile, null)
+        stubList = stubTree?.plainList ?: emptyList()
+        ktFile.putUserData(STUBS_KEY, WeakReference(stubList))
+    }
+    val nodeList = (ktFile.node as FileElement).stubbedSpine.spineNodes
+    if (stubList.size != nodeList.size) return null
+    @Suppress("UNCHECKED_CAST")
+    return stubList[nodeList.indexOf(ktElement.node)] as S
+}
 
 internal fun deserializeClassToSymbol(
     classId: ClassId,
@@ -148,6 +180,9 @@ internal fun deserializeClassToSymbol(
                         classId.createNestedClassId(Name.identifier(declaration.name ?: error("Class doesn't have name $declaration")))
                     deserializeNestedClass(nestedClassId, context)?.fir?.let { addDeclaration(it) }
                 }
+                is KtTypeAlias -> addDeclaration(
+                    memberDeserializer.loadTypeAlias(declaration, FirTypeAliasSymbol(classId))
+                )
             }
         }
 
@@ -164,21 +199,25 @@ internal fun deserializeClassToSymbol(
 
         if (classOrObject.isData() && firPrimaryConstructor != null) {
             val zippedParameters =
-                classOrObject.primaryConstructorParameters.filter { it.hasValOrVar() } zip declarations.filterIsInstance<FirProperty>()
-            addDeclaration(createDataClassCopyFunction(classId, classOrObject, context.dispatchReceiver, zippedParameters,
-                                                       createClassTypeRefWithSourceKind = {
-                                                           firPrimaryConstructor.returnTypeRef.copyWithNewSourceKind(
-                                                               it
-                                                           )
-                                                       },
-                                                       createParameterTypeRefWithSourceKind = { property, newKind ->
-                                                           property.returnTypeRef.copyWithNewSourceKind(newKind)
-                                                       }) { src, kind ->
-                KtFakeSourceElement(src as PsiElement, kind)
-            })
+                classOrObject.primaryConstructorParameters zip declarations.filterIsInstance<FirProperty>()
+            addDeclaration(
+                createDataClassCopyFunction(
+                    classId,
+                    classOrObject,
+                    context.dispatchReceiver,
+                    zippedParameters,
+                    createClassTypeRefWithSourceKind = { firPrimaryConstructor.returnTypeRef.copyWithNewSourceKind(it) },
+                    createParameterTypeRefWithSourceKind = { property, newKind ->
+                        property.returnTypeRef.copyWithNewSourceKind(newKind)
+                    },
+                    toFirSource = { src, kind -> KtFakeSourceElement(src as PsiElement, kind) },
+                    addValueParameterAnnotations = { annotations += context.annotationDeserializer.loadAnnotations(it) },
+                    isVararg = { it.isVarArg }
+                )
+            )
         }
 
-        addCloneForArrayIfNeeded(classId, context.dispatchReceiver)
+        addCloneForArrayIfNeeded(classId, context.dispatchReceiver, session)
         session.deserializedClassConfigurator?.run {
             configure(classId)
         }
@@ -203,7 +242,6 @@ internal fun deserializeClassToSymbol(
             context.annotationDeserializer.loadAnnotations(classOrObject)
         )
 
-
         sourceElement = containerSource
 
         replaceDeprecationsProvider(getDeprecationsProvider(session))
@@ -211,5 +249,11 @@ internal fun deserializeClassToSymbol(
         session.deserializedClassConfigurator?.run {
             configure(classId)
         }
+
+        setLazyPublishedVisibility(
+            hasPublishedApi = classOrObject.annotationEntries.any { context.annotationDeserializer.getAnnotationClassId(it) == StandardClassIds.Annotations.PublishedApi },
+            parentProperty = null,
+            session
+        )
     }
 }

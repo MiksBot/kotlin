@@ -18,7 +18,6 @@ package org.jetbrains.kotlin.gradle
 
 import org.gradle.api.JavaVersion
 import org.gradle.api.logging.LogLevel
-import org.gradle.api.logging.configuration.WarningMode
 import org.gradle.testkit.runner.BuildResult
 import org.gradle.util.GradleVersion
 import org.jetbrains.kotlin.gradle.tasks.USING_JVM_INCREMENTAL_COMPILATION_MESSAGE
@@ -28,7 +27,6 @@ import org.jetbrains.kotlin.gradle.util.checkedReplace
 import org.jetbrains.kotlin.gradle.util.testResolveAllConfigurations
 import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.DisplayName
-import org.junit.jupiter.api.condition.EnabledOnOs
 import org.junit.jupiter.api.condition.OS
 import java.nio.file.Files
 import java.util.zip.ZipFile
@@ -168,9 +166,8 @@ open class Kapt3IT : Kapt3BaseIT() {
             buildGradle.appendText(
                 """
                 |
-                |java {
-                |    sourceCompatibility = JavaVersion.VERSION_1_8
-                |    targetCompatibility = JavaVersion.VERSION_1_8
+                |kotlin {
+                |    jvmToolchain(8)
                 |}
                 """.trimMargin()
             )
@@ -896,6 +893,8 @@ open class Kapt3IT : Kapt3BaseIT() {
     }
 
     @DisplayName("KT-31127: processor using Filer api does not break 'javaCompile' task")
+    @GradleTestVersions(maxVersion = TestVersions.Gradle.G_7_6)
+    @AndroidTestVersions(maxVersion = TestVersions.AGP.AGP_74)
     @GradleTest
     fun testKotlinProcessorUsingFiler(gradleVersion: GradleVersion) {
         project("kotlinProject", gradleVersion) {
@@ -932,10 +931,11 @@ open class Kapt3IT : Kapt3BaseIT() {
 
     @DisplayName("should do annotation processing when 'sourceCompatibility = 8' and JDK is 11+")
     @JdkVersions(versions = [JavaVersion.VERSION_11])
+    @GradleTestVersions(maxVersion = TestVersions.Gradle.G_7_6)
     @GradleWithJdkTest
     fun testSimpleWithJdk11AndSourceLevel8(
         gradleVersion: GradleVersion,
-        jdk: JdkVersions.ProvidedJdk
+        jdk: JdkVersions.ProvidedJdk,
     ) {
         project(
             "simple".withPrefix,
@@ -1030,7 +1030,7 @@ open class Kapt3IT : Kapt3BaseIT() {
 
     @DisplayName("KT-52392: Setup with different windows disks does not fail configuration")
     @GradleTest
-    @EnabledOnOs(OS.WINDOWS)
+    @OsCondition(supportedOn = [OS.WINDOWS], enabledOnCI = [OS.WINDOWS])
     fun testDifferentDisksSetupDoesNotFailConfiguration(gradleVersion: GradleVersion) {
         project("simple".withPrefix, gradleVersion) {
             fun findAnotherRoot() = ('A'..'Z').first { !projectPath.root.startsWith(it.toString()) }
@@ -1268,6 +1268,16 @@ open class Kapt3IT : Kapt3BaseIT() {
                     ":kaptGenerateStubsKotlin",
                     "plugin:org.jetbrains.kotlin.noarg:annotation=my.custom.Annotation"
                 )
+            }
+        }
+    }
+
+    @DisplayName("KT-59256: kapt generated files are included into the test runtime classpath")
+    @GradleTest
+    fun testKaptGeneratedInTestRuntimeClasspath(gradleVersion: GradleVersion) {
+        project("kapt-in-test-runtime-classpath".withPrefix, gradleVersion) {
+            build("test") {
+                assertFileInProjectExists("build/tmp/kapt3/classes/main/META-INF/services/com.example.SomeInterface")
             }
         }
     }

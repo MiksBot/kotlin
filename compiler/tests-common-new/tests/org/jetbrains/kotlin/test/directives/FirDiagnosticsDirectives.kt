@@ -81,6 +81,19 @@ object FirDiagnosticsDirectives : SimpleDirectivesContainer() {
             Directive must contain description of ignoring in argument
         """.trimIndent()
     )
+
+    val PLATFORM_DEPENDANT_METADATA by directive(
+        description = """
+            Generate separate dumps for JVM and JS load compiled kotlin tests
+            See AbstractLoadedMetadataDumpHandler
+        """
+    )
+
+    val RENDER_FIR_DECLARATION_ATTRIBUTES by directive(
+        description = """
+            Prints declaration attributes to dumps in load compiled kotlin tests
+        """
+    )
 }
 
 fun TestConfigurationBuilder.configureFirParser(parser: FirParser) {

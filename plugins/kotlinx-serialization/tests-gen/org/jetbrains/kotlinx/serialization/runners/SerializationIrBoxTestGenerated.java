@@ -92,6 +92,12 @@ public class SerializationIrBoxTestGenerated extends AbstractSerializationIrBoxT
     }
 
     @Test
+    @TestMetadata("expectActualSealedClass.kt")
+    public void testExpectActualSealedClass() throws Exception {
+        runTest("plugins/kotlinx-serialization/testData/boxIr/expectActualSealedClass.kt");
+    }
+
+    @Test
     @TestMetadata("externalSerialierJava.kt")
     public void testExternalSerialierJava() throws Exception {
         runTest("plugins/kotlinx-serialization/testData/boxIr/externalSerialierJava.kt");
@@ -221,6 +227,18 @@ public class SerializationIrBoxTestGenerated extends AbstractSerializationIrBoxT
     @TestMetadata("serializableOnPropertyType.kt")
     public void testSerializableOnPropertyType() throws Exception {
         runTest("plugins/kotlinx-serialization/testData/boxIr/serializableOnPropertyType.kt");
+    }
+
+    @Test
+    @TestMetadata("serializerFactory.kt")
+    public void testSerializerFactory() throws Exception {
+        runTest("plugins/kotlinx-serialization/testData/boxIr/serializerFactory.kt");
+    }
+
+    @Test
+    @TestMetadata("serializerFactoryInUserDefined.kt")
+    public void testSerializerFactoryInUserDefined() throws Exception {
+        runTest("plugins/kotlinx-serialization/testData/boxIr/serializerFactoryInUserDefined.kt");
     }
 
     @Test

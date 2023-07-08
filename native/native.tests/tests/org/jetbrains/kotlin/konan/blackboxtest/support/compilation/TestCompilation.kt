@@ -128,11 +128,11 @@ internal abstract class SourceBasedCompilation<A : TestCompilationArtifact>(
     classLoader: KotlinNativeClassLoader,
     optimizationMode: OptimizationMode,
     compilerOutputInterceptor: CompilerOutputInterceptor,
-    private val memoryModel: MemoryModel,
     private val threadStateChecker: ThreadStateChecker,
     private val sanitizer: Sanitizer,
     private val gcType: GCType,
     private val gcScheduler: GCScheduler,
+    private val allocator: Allocator,
     private val pipelineType: PipelineType,
     freeCompilerArgs: TestCompilerArgs,
     override val sourceModules: Collection<TestModule>,
@@ -150,7 +150,6 @@ internal abstract class SourceBasedCompilation<A : TestCompilationArtifact>(
 ) {
     override fun applySpecificArgs(argsBuilder: ArgsBuilder): Unit = with(argsBuilder) {
         add("-repo", home.librariesDir.path)
-        memoryModel.compilerFlags?.let { compilerFlags -> add(compilerFlags) }
         threadStateChecker.compilerFlag?.let { compilerFlag -> add(compilerFlag) }
         sanitizer.compilerFlag?.let { compilerFlag -> add(compilerFlag) }
         gcType.compilerFlag?.let { compilerFlag -> add(compilerFlag) }
@@ -191,11 +190,11 @@ internal class LibraryCompilation(
     classLoader = settings.get(),
     optimizationMode = settings.get(),
     compilerOutputInterceptor = settings.get(),
-    memoryModel = settings.get(),
     threadStateChecker = settings.get(),
     sanitizer = settings.get(),
     gcType = settings.get(),
     gcScheduler = settings.get(),
+    allocator = settings.get(),
     pipelineType = settings.get(),
     freeCompilerArgs = freeCompilerArgs,
     sourceModules = sourceModules,
@@ -225,12 +224,12 @@ internal class ObjCFrameworkCompilation(
     classLoader = settings.get(),
     optimizationMode = settings.get(),
     compilerOutputInterceptor = settings.get(),
-    memoryModel = settings.get(),
     threadStateChecker = settings.get(),
     sanitizer = settings.get(),
     gcType = settings.get(),
     gcScheduler = settings.get(),
-    pipelineType = settings.get(),
+    allocator = settings.get(),
+    pipelineType = settings.getStageDependentPipelineType(),
     freeCompilerArgs = freeCompilerArgs,
     sourceModules = sourceModules,
     dependencies = CategorizedDependencies(dependencies),
@@ -310,12 +309,12 @@ internal class ExecutableCompilation(
     classLoader = settings.get(),
     optimizationMode = settings.get(),
     compilerOutputInterceptor = settings.get(),
-    memoryModel = settings.get(),
     threadStateChecker = settings.get(),
     sanitizer = settings.get(),
     gcType = settings.get(),
     gcScheduler = settings.get(),
-    pipelineType = settings.get(),
+    allocator = settings.get(),
+    pipelineType = settings.getStageDependentPipelineType(),
     freeCompilerArgs = freeCompilerArgs,
     sourceModules = sourceModules,
     dependencies = CategorizedDependencies(dependencies),
@@ -511,3 +510,9 @@ private object BinaryOptions {
         fun chooseFor(cacheMode: CacheMode) = if (cacheMode.useStaticCacheForDistributionLibraries) forUseWithCache else defaultForTesting
     }
 }
+
+internal fun Settings.getStageDependentPipelineType(): PipelineType =
+    when (get<TestMode>()) {
+        TestMode.ONE_STAGE_MULTI_MODULE -> get<PipelineType>()
+        TestMode.TWO_STAGE_MULTI_MODULE -> PipelineType.K1  // Don't pass "-language_version 2.0" to the second stage
+    }

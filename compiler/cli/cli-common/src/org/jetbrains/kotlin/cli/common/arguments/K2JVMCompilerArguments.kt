@@ -145,16 +145,6 @@ class K2JVMCompilerArguments : CommonCompilerArguments() {
 
     // Advanced options
 
-    @Argument(
-        value = "-Xuse-ir",
-        description = "Use the IR backend. This option has no effect unless the language version less than 1.5 is used"
-    )
-    var useIR = false
-        set(value) {
-            checkFrozen()
-            field = value
-        }
-
     @Argument(value = "-Xuse-old-backend", description = "Use the old JVM backend")
     var useOldBackend = false
         set(value) {
@@ -827,7 +817,8 @@ Also sets `-jvm-target` value equal to the selected JDK version"""
 
     @Argument(
         value = "-Xuse-old-innerclasses-logic",
-        description = "Use old logic for generation of InnerClasses attributes"
+        description = "Use old logic for generation of InnerClasses attributes.\n" +
+                "This option is deprecated and will be deleted in future versions."
     )
     var oldInnerClassesLogic = false
         set(value) {
@@ -855,6 +846,15 @@ Also sets `-jvm-target` value equal to the selected JDK version"""
             field = value
         }
 
+    @Argument(
+        value = "-Xuse-kapt4",
+        description = "Enable the experimental KAPT 4."
+    )
+    var useKapt4 = false
+        set(value) {
+            checkFrozen()
+            field = value
+        }
 
     override fun configureAnalysisFlags(collector: MessageCollector, languageVersion: LanguageVersion): MutableMap<AnalysisFlag<*>, Any> {
         val result = super.configureAnalysisFlags(collector, languageVersion)
@@ -918,6 +918,12 @@ Also sets `-jvm-target` value equal to the selected JDK version"""
                 CompilerMessageSeverity.ERROR,
                 "Old JVM backend does not support language version 1.6 or above. " +
                         "Please use language version 1.5 or below, or remove -Xuse-old-backend"
+            )
+        }
+        if (oldInnerClassesLogic) {
+            collector.report(
+                CompilerMessageSeverity.WARNING,
+                "The -Xuse-old-innerclasses-logic option is deprecated and will be deleted in future versions."
             )
         }
     }

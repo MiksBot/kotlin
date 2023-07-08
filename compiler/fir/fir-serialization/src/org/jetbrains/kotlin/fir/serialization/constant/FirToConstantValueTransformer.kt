@@ -11,17 +11,19 @@ import org.jetbrains.kotlin.fir.FirElement
 import org.jetbrains.kotlin.fir.FirSession
 import org.jetbrains.kotlin.fir.containingClassLookupTag
 import org.jetbrains.kotlin.fir.declarations.FirEnumEntry
+import org.jetbrains.kotlin.fir.declarations.FirField
 import org.jetbrains.kotlin.fir.declarations.utils.isConst
 import org.jetbrains.kotlin.fir.declarations.utils.isFinal
 import org.jetbrains.kotlin.fir.expressions.*
 import org.jetbrains.kotlin.fir.render
-import org.jetbrains.kotlin.fir.java.declarations.FirJavaField
 import org.jetbrains.kotlin.fir.resolve.toFirRegularClassSymbol
 import org.jetbrains.kotlin.fir.resolve.transformers.body.resolve.FirArrayOfCallTransformer
 import org.jetbrains.kotlin.fir.resolve.transformers.body.resolve.FirArrayOfCallTransformer.Companion.isArrayOfCall
 import org.jetbrains.kotlin.fir.symbols.impl.FirConstructorSymbol
+import org.jetbrains.kotlin.fir.symbols.impl.FirFieldSymbol
 import org.jetbrains.kotlin.fir.symbols.impl.FirPropertySymbol
-import org.jetbrains.kotlin.fir.types.*
+import org.jetbrains.kotlin.fir.types.coneType
+import org.jetbrains.kotlin.fir.types.coneTypeUnsafe
 import org.jetbrains.kotlin.fir.visitors.FirDefaultVisitor
 import org.jetbrains.kotlin.types.ConstantValueKind
 
@@ -46,9 +48,16 @@ internal data class FirToConstantValueTransformerData(
     val constValueProvider: ConstValueProvider?,
 )
 
+private val constantIntrinsicCalls = setOf("toByte", "toLong", "toShort", "toFloat", "toDouble", "toChar", "unaryMinus")
+
 internal abstract class FirToConstantValueTransformer(
     private val failOnNonConst: Boolean,
 ) : FirDefaultVisitor<ConstantValue<*>?, FirToConstantValueTransformerData>() {
+    private fun FirExpression.toConstantValue(data: FirToConstantValueTransformerData): ConstantValue<*>? {
+        return data.constValueProvider?.findConstantValueFor(this)
+            ?: accept(this@FirToConstantValueTransformer, data)
+    }
+
     override fun visitElement(
         element: FirElement,
         data: FirToConstantValueTransformerData
@@ -87,7 +96,7 @@ internal abstract class FirToConstantValueTransformer(
         stringConcatenationCall: FirStringConcatenationCall,
         data: FirToConstantValueTransformerData
     ): ConstantValue<*>? {
-        val strings = stringConcatenationCall.argumentList.arguments.map { it.accept(this, data) }
+        val strings = stringConcatenationCall.argumentList.arguments.map { it.toConstantValue(data) }
         if (strings.any { it == null || it !is StringValue }) return null
         return StringValue(strings.joinToString(separator = "") { (it as StringValue).value })
     }
@@ -96,7 +105,7 @@ internal abstract class FirToConstantValueTransformer(
         arrayOfCall: FirArrayOfCall,
         data: FirToConstantValueTransformerData
     ): ConstantValue<*> {
-        return ArrayValue(arrayOfCall.argumentList.arguments.mapNotNull { it.accept(this, data) })
+        return ArrayValue(arrayOfCall.argumentList.arguments.mapNotNull { it.toConstantValue(data) })
     }
 
     override fun visitAnnotation(
@@ -132,12 +141,12 @@ internal abstract class FirToConstantValueTransformer(
             }
 
             symbol is FirPropertySymbol -> {
-                if (symbol.fir.isConst) symbol.fir.initializer?.accept(this, data) else null
+                if (symbol.fir.isConst) symbol.fir.initializer?.toConstantValue(data) else null
             }
 
-            fir is FirJavaField -> {
+            fir is FirField -> {
                 if (fir.isFinal) {
-                    fir.initializer?.accept(this, data)
+                    fir.initializer?.toConstantValue(data)
                 } else {
                     null
                 }
@@ -155,22 +164,25 @@ internal abstract class FirToConstantValueTransformer(
             }
 
             symbol.callableId.packageName.asString() == "kotlin" -> {
+                val callableName = symbol.callableId.callableName.asString()
+                if (callableName !in constantIntrinsicCalls) return null
+
                 val dispatchReceiver = qualifiedAccessExpression.dispatchReceiver
-                val dispatchReceiverValue by lazy { dispatchReceiver.accept(this, data) }
-                when (symbol.callableId.callableName.asString()) {
-                    "toByte" -> ByteValue((dispatchReceiverValue!!.value as Number).toByte())
-                    "toLong" -> LongValue((dispatchReceiverValue!!.value as Number).toLong())
-                    "toShort" -> ShortValue((dispatchReceiverValue!!.value as Number).toShort())
-                    "toFloat" -> FloatValue((dispatchReceiverValue!!.value as Number).toFloat())
-                    "toDouble" -> DoubleValue((dispatchReceiverValue!!.value as Number).toDouble())
-                    "toChar" -> CharValue((dispatchReceiverValue!!.value as Number).toInt().toChar())
+                val dispatchReceiverValue = dispatchReceiver.toConstantValue(data) ?: return null
+                when (callableName) {
+                    "toByte" -> ByteValue((dispatchReceiverValue.value as Number).toByte())
+                    "toLong" -> LongValue((dispatchReceiverValue.value as Number).toLong())
+                    "toShort" -> ShortValue((dispatchReceiverValue.value as Number).toShort())
+                    "toFloat" -> FloatValue((dispatchReceiverValue.value as Number).toFloat())
+                    "toDouble" -> DoubleValue((dispatchReceiverValue.value as Number).toDouble())
+                    "toChar" -> CharValue((dispatchReceiverValue.value as Number).toInt().toChar())
                     "unaryMinus" -> {
-                        when (val receiverValue = dispatchReceiverValue) {
-                            is ByteValue -> ByteValue((-receiverValue.value).toByte())
-                            is LongValue -> LongValue(-receiverValue.value)
-                            is ShortValue -> ShortValue((-receiverValue.value).toShort())
-                            is FloatValue -> FloatValue(-receiverValue.value)
-                            is DoubleValue -> DoubleValue(-receiverValue.value)
+                        when (dispatchReceiverValue) {
+                            is ByteValue -> ByteValue((-dispatchReceiverValue.value).toByte())
+                            is LongValue -> LongValue(-dispatchReceiverValue.value)
+                            is ShortValue -> ShortValue((-dispatchReceiverValue.value).toShort())
+                            is FloatValue -> FloatValue(-dispatchReceiverValue.value)
+                            is DoubleValue -> DoubleValue(-dispatchReceiverValue.value)
                             else -> null
                         }
                     }
@@ -201,16 +213,22 @@ internal abstract class FirToConstantValueTransformer(
 
     override fun visitVarargArgumentsExpression(
         varargArgumentsExpression: FirVarargArgumentsExpression,
-        data: FirToConstantValueTransformerData
+        data: FirToConstantValueTransformerData,
     ): ConstantValue<*> {
-        return ArrayValue(varargArgumentsExpression.arguments.mapNotNull { it.accept(this, data) })
+        val arguments = varargArgumentsExpression.arguments.let {
+            // Named, spread or array literal arguments for vararg parameters have the form Vararg(Named/Spread?(ArrayOfCall(..))).
+            // We need to extract the ArrayOfCall, otherwise we will get two nested ArrayValue as a result.
+            (it.singleOrNull()?.unwrapArgument() as? FirArrayOfCall)?.arguments ?: it
+        }
+
+        return ArrayValue(arguments.mapNotNull { it.toConstantValue(data) })
     }
 
-    override fun visitNamedArgumentExpression(
-        namedArgumentExpression: FirNamedArgumentExpression,
-        data: FirToConstantValueTransformerData
+    override fun visitWrappedArgumentExpression(
+        wrappedArgumentExpression: FirWrappedArgumentExpression,
+        data: FirToConstantValueTransformerData,
     ): ConstantValue<*>? {
-        return namedArgumentExpression.expression.accept(this, data)
+        return wrappedArgumentExpression.expression.toConstantValue(data)
     }
 }
 
@@ -221,8 +239,6 @@ internal object FirToConstantValueChecker : FirDefaultVisitor<Boolean, FirSessio
         ConstantValueKind.Byte, ConstantValueKind.UnsignedByte, ConstantValueKind.Short, ConstantValueKind.UnsignedShort,
         ConstantValueKind.Int, ConstantValueKind.UnsignedInt, ConstantValueKind.Long, ConstantValueKind.UnsignedLong,
     )
-
-    private val constantIntrinsicCalls = setOf("toByte", "toLong", "toShort", "toFloat", "toDouble", "toChar", "unaryMinus")
 
     override fun visitElement(element: FirElement, data: FirSession): Boolean {
         return false
@@ -253,14 +269,13 @@ internal object FirToConstantValueChecker : FirDefaultVisitor<Boolean, FirSessio
 
     override fun visitQualifiedAccessExpression(qualifiedAccessExpression: FirQualifiedAccessExpression, data: FirSession): Boolean {
         val symbol = qualifiedAccessExpression.toResolvedCallableSymbol() ?: return false
-        val fir = symbol.fir
 
         return when {
             symbol.fir is FirEnumEntry -> symbol.callableId.classId != null
 
             symbol is FirPropertySymbol -> symbol.fir.isConst
 
-            fir is FirJavaField -> symbol.fir.isFinal
+            symbol is FirFieldSymbol -> symbol.fir.isFinal
 
             symbol is FirConstructorSymbol -> {
                 symbol.containingClassLookupTag()?.toFirRegularClassSymbol(data)?.classKind == ClassKind.ANNOTATION_CLASS

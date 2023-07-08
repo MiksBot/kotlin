@@ -162,6 +162,20 @@ object PositioningStrategies {
     }
 
     @JvmField
+    val DECLARATION_NAME_ONLY: PositioningStrategy<KtNamedDeclaration> = object : DeclarationHeader<KtNamedDeclaration>() {
+        override fun mark(element: KtNamedDeclaration): List<TextRange> {
+            val nameIdentifier = element.nameIdentifier
+            if (nameIdentifier != null) {
+                return markElement(nameIdentifier)
+            }
+            if (element is KtNamedFunction) {
+                return DECLARATION_SIGNATURE.mark(element)
+            }
+            return DEFAULT.mark(element)
+        }
+    }
+
+    @JvmField
     val DECLARATION_SIGNATURE: PositioningStrategy<KtDeclaration> = object : DeclarationHeader<KtDeclaration>() {
         override fun mark(element: KtDeclaration): List<TextRange> {
             when (element) {
@@ -308,6 +322,14 @@ object PositioningStrategies {
     @JvmField
     val TAILREC_MODIFIER: PositioningStrategy<KtModifierListOwner> =
         ModifierSetBasedPositioningStrategy(KtTokens.TAILREC_KEYWORD)
+
+    @JvmField
+    val EXTERNAL_MODIFIER: PositioningStrategy<KtModifierListOwner> =
+        ModifierSetBasedPositioningStrategy(KtTokens.EXTERNAL_KEYWORD)
+
+    @JvmField
+    val EXPECT_ACTUAL_MODIFIER: PositioningStrategy<KtModifierListOwner> =
+        ModifierSetBasedPositioningStrategy(KtTokens.EXPECT_KEYWORD, KtTokens.ACTUAL_KEYWORD)
 
     @JvmField
     val OBJECT_KEYWORD: PositioningStrategy<KtObjectDeclaration> = object : PositioningStrategy<KtObjectDeclaration>() {
@@ -671,7 +693,8 @@ object PositioningStrategies {
                     if (lastArgument != null) {
                         markRange(lastArgument, rightParenthesis)
                     } else {
-                        markRange(qualifiedAccess, rightParenthesis)
+                        val leftParenthesis = argumentList.leftParenthesis
+                        markRange(leftParenthesis ?: qualifiedAccess, rightParenthesis)
                     }
                 }
 
@@ -681,6 +704,13 @@ object PositioningStrategies {
 
                 else -> markElement(qualifiedAccess)
             }
+        }
+    }
+
+    @JvmField
+    val VALUE_ARGUMENTS_LIST: PositioningStrategy<KtElement> = object : PositioningStrategy<KtElement>() {
+        override fun mark(element: KtElement): List<TextRange> {
+            return markElement(element.getChildOfType<KtValueArgumentList>() ?: element)
         }
     }
 
@@ -921,9 +951,16 @@ object PositioningStrategies {
     val REIFIED_MODIFIER: PositioningStrategy<KtModifierListOwner> =
         ModifierSetBasedPositioningStrategy(KtTokens.REIFIED_KEYWORD)
 
-    val PROPERTY_INITIALIZER: PositioningStrategy<KtProperty> = object : PositioningStrategy<KtProperty>() {
-        override fun mark(element: KtProperty): List<TextRange> {
-            return markElement(element.initializer ?: element)
+    val PROPERTY_INITIALIZER: PositioningStrategy<KtNamedDeclaration> = object : PositioningStrategy<KtNamedDeclaration>() {
+        override fun mark(element: KtNamedDeclaration): List<TextRange> {
+            return markElement(
+                when (element) {
+                    is KtProperty -> element.initializer ?: element
+                    // Type reference is used as a target for loop variable type mismatches
+                    is KtParameter -> element.defaultValue ?: element.typeReference ?: element
+                    else -> element
+                }
+            )
         }
     }
 
@@ -980,6 +1017,8 @@ object PositioningStrategies {
                 }
             }
         }
+
+        override fun isValid(element: PsiElement): Boolean = true
     }
 
     val NON_FINAL_MODIFIER_OR_NAME: PositioningStrategy<KtModifierListOwner> =

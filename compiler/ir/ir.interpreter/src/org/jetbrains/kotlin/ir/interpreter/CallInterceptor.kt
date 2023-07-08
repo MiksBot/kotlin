@@ -23,6 +23,7 @@ import org.jetbrains.kotlin.ir.types.*
 import org.jetbrains.kotlin.ir.util.*
 import org.jetbrains.kotlin.ir.util.hasAnnotation
 import org.jetbrains.kotlin.name.FqName
+import org.jetbrains.kotlin.platform.isJs
 import java.lang.invoke.MethodHandle
 
 internal interface CallInterceptor {
@@ -90,7 +91,9 @@ internal class DefaultCallInterceptor(override val interpreter: IrInterpreter) :
             irClass.defaultType.isUnsignedType() -> {
                 // Check for type is a hack needed for Native;
                 // in UInt, for example, we may have (after lowerings, I guess) additional property "$companion".
-                val propertySymbol = irClass.declarations.single { it is IrProperty && it.getter?.returnType?.isPrimitiveType() == true }.symbol
+                // Check for fake overrides is a hack needed for Wasm;
+                // in UInt, for example, we may have additional typeInfo and hashCode properties declared in "Any"
+                val propertySymbol = irClass.declarations.single { it is IrProperty && !it.isFakeOverride && it.getter?.returnType?.isPrimitiveType() == true }.symbol
                 callStack.pushState(receiver.apply { this.setField(propertySymbol, args.single()) })
             }
             else -> defaultAction()
@@ -144,46 +147,50 @@ internal class DefaultCallInterceptor(override val interpreter: IrInterpreter) :
         return true
     }
 
+    private data class Signature(var name: String, var args: List<Arg>)
+    private data class Arg(var type: String, var value: Any?)
+
     private fun calculateBuiltIns(irFunction: IrFunction, args: List<State>) {
-        val methodName = when (val property = irFunction.property?.symbol) {
+        val methodName = when (val property = irFunction.property) {
             null -> irFunction.name.asString()
-            else -> property.owner.name.asString()
+            else -> property.name.asString()
         }
 
         val receiverType = irFunction.dispatchReceiverParameter?.type ?: irFunction.extensionReceiverParameter?.type
-        val argsType = (listOfNotNull(receiverType) + irFunction.valueParameters.map { it.type }).map {
-            // TODO: for consistency with current K/JS implementation Float constant should be treated as a Double (KT-35422)
-            if (environment.configuration.treatFloatInSpecialWay && it.makeNotNull().isFloat()) {
-                if (it.isNullable()) irBuiltIns.doubleType.makeNullable() else irBuiltIns.doubleType
-            } else {
-                it
-            }
-        }
+        val argsType = (listOfNotNull(receiverType) + irFunction.valueParameters.map { it.type }).map { it.fqNameWithNullability() }
         val argsValues = args.wrap(this, irFunction)
 
-        // TODO replace unary, binary, ternary functions with vararg
         withExceptionHandler(environment) {
-            val result = when (argsType.size) {
-                1 -> when {
-                    methodName == "toString" && environment.configuration.treatFloatInSpecialWay && (argsValues[0] is Double || argsValues[0] is Float) -> {
-                        argsValues[0].specialToStringForJs()
-                    }
-                    else -> interpretUnaryFunction(methodName, argsType[0].getOnlyName(), argsValues[0])
-                }
-                2 -> when (methodName) {
-                    "rangeTo" -> return calculateRangeTo(irFunction.returnType, args)
-                    else -> interpretBinaryFunction(
-                        methodName, argsType[0].getOnlyName(), argsType[1].getOnlyName(), argsValues[0], argsValues[1]
-                    )
-                }
-                3 -> interpretTernaryFunction(
-                    methodName, argsType[0].getOnlyName(), argsType[1].getOnlyName(), argsType[2].getOnlyName(),
-                    argsValues[0], argsValues[1], argsValues[2]
-                )
-                else -> throw InterpreterError("Unsupported number of arguments for invocation as builtin function: $methodName")
-            }
+            if (methodName == "rangeTo") return calculateRangeTo(irFunction.returnType, args)
+            val result = interpretBuiltinFunction(Signature(methodName, argsType.zip(argsValues).map { Arg(it.first, it.second) }))
             // TODO check "result is Unit"
             callStack.pushState(environment.convertToState(result, result.getType(irFunction.returnType)))
+        }
+    }
+
+    private fun interpretBuiltinFunction(signature: Signature): Any? {
+        if (environment.configuration.platform.isJs()) {
+            if (signature.name == "toString") return signature.args[0].value.specialToStringForJs()
+            if (signature.name == "toFloat") signature.name = "toDouble"
+            signature.args
+                .filter { it.value is Float || it.type == "kotlin.Float" || it.type == "kotlin.Float?" }
+                .forEach {
+                    it.type = when (it.type) {
+                        "kotlin.Float" -> "kotlin.Double"
+                        "kotlin.Float?" -> "kotlin.Double?"
+                        else -> it.type
+                    }
+                    it.value = it.value.toString().toDouble()
+                }
+        }
+
+        val name = signature.name
+        val args = signature.args
+        return when (args.size) {
+            1 -> interpretUnaryFunction(name, args[0].type, args[0].value)
+            2 -> interpretBinaryFunction(name, args[0].type, args[1].type, args[0].value, args[1].value)
+            3 -> interpretTernaryFunction(name, args[0].type, args[1].type, args[2].type, args[0].value, args[1].value, args[2].value)
+            else -> throw InterpreterError("Unsupported number of arguments for invocation as builtin function: $name")
         }
     }
 

@@ -48,6 +48,7 @@ import org.jetbrains.kotlin.fir.declarations.FirBackingField
 import org.jetbrains.kotlin.fir.declarations.FirConstructor
 import org.jetbrains.kotlin.fir.declarations.FirFile
 import org.jetbrains.kotlin.fir.declarations.FirScript
+import org.jetbrains.kotlin.fir.declarations.FirCodeFragment
 import org.jetbrains.kotlin.fir.FirPackageDirective
 import org.jetbrains.kotlin.fir.declarations.FirAnonymousFunction
 import org.jetbrains.kotlin.fir.expressions.FirAnonymousFunctionExpression
@@ -105,9 +106,11 @@ import org.jetbrains.kotlin.fir.expressions.FirFunctionCall
 import org.jetbrains.kotlin.fir.expressions.FirIntegerLiteralOperatorCall
 import org.jetbrains.kotlin.fir.expressions.FirImplicitInvokeCall
 import org.jetbrains.kotlin.fir.expressions.FirDelegatedConstructorCall
+import org.jetbrains.kotlin.fir.expressions.FirMultiDelegatedConstructorCall
 import org.jetbrains.kotlin.fir.expressions.FirComponentCall
 import org.jetbrains.kotlin.fir.expressions.FirCallableReferenceAccess
 import org.jetbrains.kotlin.fir.expressions.FirThisReceiverExpression
+import org.jetbrains.kotlin.fir.expressions.FirInaccessibleReceiverExpression
 import org.jetbrains.kotlin.fir.expressions.FirSmartCastExpression
 import org.jetbrains.kotlin.fir.expressions.FirSafeCallExpression
 import org.jetbrains.kotlin.fir.expressions.FirCheckedSafeCallSubject
@@ -248,6 +251,8 @@ abstract class FirVisitor<out R, in D> {
 
     open fun visitScript(script: FirScript, data: D): R  = visitElement(script, data)
 
+    open fun visitCodeFragment(codeFragment: FirCodeFragment, data: D): R  = visitElement(codeFragment, data)
+
     open fun visitPackageDirective(packageDirective: FirPackageDirective, data: D): R  = visitElement(packageDirective, data)
 
     open fun visitAnonymousFunction(anonymousFunction: FirAnonymousFunction, data: D): R  = visitElement(anonymousFunction, data)
@@ -362,11 +367,15 @@ abstract class FirVisitor<out R, in D> {
 
     open fun visitDelegatedConstructorCall(delegatedConstructorCall: FirDelegatedConstructorCall, data: D): R  = visitElement(delegatedConstructorCall, data)
 
+    open fun visitMultiDelegatedConstructorCall(multiDelegatedConstructorCall: FirMultiDelegatedConstructorCall, data: D): R  = visitElement(multiDelegatedConstructorCall, data)
+
     open fun visitComponentCall(componentCall: FirComponentCall, data: D): R  = visitElement(componentCall, data)
 
     open fun visitCallableReferenceAccess(callableReferenceAccess: FirCallableReferenceAccess, data: D): R  = visitElement(callableReferenceAccess, data)
 
     open fun visitThisReceiverExpression(thisReceiverExpression: FirThisReceiverExpression, data: D): R  = visitElement(thisReceiverExpression, data)
+
+    open fun visitInaccessibleReceiverExpression(inaccessibleReceiverExpression: FirInaccessibleReceiverExpression, data: D): R  = visitElement(inaccessibleReceiverExpression, data)
 
     open fun visitSmartCastExpression(smartCastExpression: FirSmartCastExpression, data: D): R  = visitElement(smartCastExpression, data)
 

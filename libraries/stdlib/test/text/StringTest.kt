@@ -10,7 +10,6 @@ import test.*
 import test.collections.behaviors.iteratorBehavior
 import test.collections.compare
 import kotlin.math.sign
-import kotlin.native.concurrent.SharedImmutable
 import kotlin.random.Random
 
 
@@ -18,7 +17,6 @@ fun createString(content: String): CharSequence = content
 fun createStringBuilder(content: String): CharSequence = StringBuilder((content as Any).toString()) // required for Rhino JS
 
 
-@SharedImmutable
 val charSequenceBuilders = listOf(::createString, ::createStringBuilder)
 
 fun withOneCharSequenceArg(f: ((String) -> CharSequence) -> Unit) {
@@ -1855,5 +1853,18 @@ ${"    "}
         assertFalse("sample".contentEquals(null, ignoreCase = true))
         assertTrue(null.contentEquals(null, ignoreCase = true))
         assertTrue(null.contentEquals(null, ignoreCase = false))
+    }
+
+    @Test
+    fun indexOfRespectsCharBoundary() {
+        withOneCharSequenceArg("\u003a\u3b3c\u003d") { input ->
+            assertEquals(-1, input.indexOf("\u3c00"))
+            assertEquals(-1, input.indexOf("\u3d3b"))
+            assertEquals(-1, input.indexOf("\u3c00\u3d3b"))
+        }
+
+        // KT-56637
+        assertEquals("買っ", "買っ".replace("掌", "X"))
+        assertEquals("買", "買".replace("掌", "X"))
     }
 }

@@ -15,10 +15,7 @@ import org.jetbrains.kotlin.backend.common.phaser.PhaseConfig
 import org.jetbrains.kotlin.cli.common.messages.AnalyzerWithCompilerReport
 import org.jetbrains.kotlin.cli.common.messages.MessageRenderer
 import org.jetbrains.kotlin.cli.common.messages.PrintingMessageCollector
-import org.jetbrains.kotlin.cli.js.klib.compileModuleToAnalyzedFirWithPsi
-import org.jetbrains.kotlin.cli.js.klib.generateIrForKlibSerialization
-import org.jetbrains.kotlin.cli.js.klib.serializeFirKlib
-import org.jetbrains.kotlin.cli.js.klib.transformFirToIr
+import org.jetbrains.kotlin.cli.js.klib.*
 import org.jetbrains.kotlin.cli.jvm.compiler.EnvironmentConfigFiles
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
 import org.jetbrains.kotlin.config.CommonConfigurationKeys
@@ -26,11 +23,11 @@ import org.jetbrains.kotlin.config.CompilerConfiguration
 import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
 import org.jetbrains.kotlin.diagnostics.DiagnosticReporterFactory
 import org.jetbrains.kotlin.ir.backend.js.*
-import org.jetbrains.kotlin.ir.backend.js.codegen.JsGenerationGranularity
 import org.jetbrains.kotlin.ir.backend.js.ic.CacheUpdater
 import org.jetbrains.kotlin.ir.backend.js.ic.JsExecutableProducer
 import org.jetbrains.kotlin.ir.backend.js.transformers.irToJs.CompilationOutputs
 import org.jetbrains.kotlin.ir.backend.js.transformers.irToJs.IrModuleToJsTransformer
+import org.jetbrains.kotlin.ir.backend.js.transformers.irToJs.JsGenerationGranularity
 import org.jetbrains.kotlin.ir.backend.js.transformers.irToJs.TranslationMode
 import org.jetbrains.kotlin.ir.declarations.IrModuleFragment
 import org.jetbrains.kotlin.ir.declarations.impl.IrFactoryImpl
@@ -64,11 +61,11 @@ abstract class AbstractJsPartialLinkageWithICTestCase : AbstractJsPartialLinkage
 abstract class AbstractFirJsPartialLinkageNoICTestCase : AbstractJsPartialLinkageTestCase(CompilerType.K2_NO_IC)
 
 abstract class AbstractJsPartialLinkageTestCase(val compilerType: CompilerType) {
-    enum class CompilerType(val testModeName: String, val es6Mode: Boolean) {
-        K1_NO_IC("JS_NO_IC", false),
-        K1_NO_IC_WITH_ES6("JS_NO_IC", true),
-        K1_WITH_IC("JS_WITH_IC", false),
-        K2_NO_IC("JS_NO_IC", false)
+    enum class CompilerType(val es6Mode: Boolean) {
+        K1_NO_IC(false),
+        K1_NO_IC_WITH_ES6(true),
+        K1_WITH_IC(false),
+        K2_NO_IC(false)
     }
 
     private val zipAccessor = ZipFileSystemCacheableAccessor(2)
@@ -99,7 +96,7 @@ abstract class AbstractJsPartialLinkageTestCase(val compilerType: CompilerType) 
         override val testDir: File = File(testPath).absoluteFile
         override val buildDir: File get() = this@AbstractJsPartialLinkageTestCase.buildDir
         override val stdlibFile: File get() = File("libraries/stdlib/js-ir/build/classes/kotlin/js/main").absoluteFile
-        override val testModeName get() = this@AbstractJsPartialLinkageTestCase.compilerType.testModeName
+        override val testModeConstructorParameters = mapOf("isJs" to "true")
 
         override fun buildKlib(
             moduleName: String,
@@ -205,36 +202,37 @@ abstract class AbstractJsPartialLinkageTestCase(val compilerType: CompilerType) 
         val outputStream = ByteArrayOutputStream()
         val messageCollector = PrintingMessageCollector(PrintStream(outputStream), MessageRenderer.PLAIN_FULL_PATHS, true)
 
-        val outputs = compileModuleToAnalyzedFirWithPsi(
+        val analyzedOutput = compileModuleToAnalyzedFirWithPsi(
             moduleStructure = moduleStructure,
             ktFiles = ktFiles,
             libraries = regularDependencies,
             friendLibraries = friendDependencies,
-            messageCollector = messageCollector,
             diagnosticsReporter = diagnosticsReporter,
             incrementalDataProvider = null,
             lookupTracker = null
         )
 
-        if (outputs != null) {
-            val fir2IrActualizedResult = transformFirToIr(moduleStructure, outputs, diagnosticsReporter)
+        val fir2IrActualizedResult = transformFirToIr(moduleStructure, analyzedOutput.output, diagnosticsReporter)
 
-            serializeFirKlib(
-                moduleStructure = moduleStructure,
-                firOutputs = outputs,
-                fir2IrActualizedResult = fir2IrActualizedResult,
-                outputKlibPath = klibFile.absolutePath,
-                messageCollector = messageCollector,
-                diagnosticsReporter = diagnosticsReporter,
-                jsOutputName = moduleName
-            )
-        }
-
-        if (messageCollector.hasErrors()) {
+        if (analyzedOutput.reportCompilationErrors(moduleStructure, diagnosticsReporter, messageCollector)) {
             val messages = outputStream.toByteArray().toString(Charset.forName("UTF-8"))
             throw AssertionError("The following errors occurred compiling test:\n$messages")
         }
 
+        serializeFirKlib(
+            moduleStructure = moduleStructure,
+            firOutputs = analyzedOutput.output,
+            fir2IrActualizedResult = fir2IrActualizedResult,
+            outputKlibPath = klibFile.absolutePath,
+            messageCollector = messageCollector,
+            diagnosticsReporter = diagnosticsReporter,
+            jsOutputName = moduleName
+        )
+
+        if (messageCollector.hasErrors()) {
+            val messages = outputStream.toByteArray().toString(Charset.forName("UTF-8"))
+            throw AssertionError("The following errors occurred serializing test klib:\n$messages")
+        }
     }
 
     private fun buildBinaryAndRun(mainModuleKlibFile: File, allDependencies: Dependencies) {
@@ -348,7 +346,7 @@ abstract class AbstractJsPartialLinkageTestCase(val compilerType: CompilerType) 
             relativeRequirePath = true
         )
 
-        return jsExecutableProducer.buildExecutable(multiModule = true, outJsProgram = true).compilationOut
+        return jsExecutableProducer.buildExecutable(granularity = JsGenerationGranularity.PER_MODULE, outJsProgram = true).compilationOut
     }
 
     private val IrModuleFragment.exportName get() = "kotlin_${name.asStringStripSpecialMarkers()}"

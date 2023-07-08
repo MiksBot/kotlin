@@ -226,6 +226,7 @@ include ":kotlin-imports-dumper-compiler-plugin",
         ":kotlin-annotation-processing-base",
         ":kotlin-annotation-processing-runtime",
         ":kotlin-annotation-processing-embeddable",
+        ":kotlin-annotation-processing-compiler",
         ":kotlin-daemon-embeddable",
         ":kotlin-annotations-jvm",
         ":kotlin-scripting-common",
@@ -262,7 +263,8 @@ include ":kotlin-imports-dumper-compiler-plugin",
         ":wasm:wasm.tests",
         ":wasm:wasm.frontend",
         ":wasm:wasm.config",
-        ":repo:codebase-tests"
+        ":repo:codebase-tests",
+        ":repo:artifacts-tests"
 
 include ":kotlin-atomicfu-compiler-plugin",
         ":kotlin-atomicfu-compiler-plugin-embeddable",
@@ -335,6 +337,7 @@ include ":kotlinx-serialization-compiler-plugin",
 if (!buildProperties.inJpsBuildIdeaSync) {
     include ":prepare:ide-plugin-dependencies:android-extensions-compiler-plugin-for-ide",
             ":prepare:ide-plugin-dependencies:allopen-compiler-plugin-for-ide",
+            ":prepare:ide-plugin-dependencies:scripting-compiler-plugin-for-ide",
             ":prepare:ide-plugin-dependencies:allopen-compiler-plugin-tests-for-ide",
             ":prepare:ide-plugin-dependencies:incremental-compilation-impl-tests-for-ide",
             ":prepare:ide-plugin-dependencies:js-ir-runtime-for-ide",
@@ -550,6 +553,7 @@ include ":generators:analysis-api-generator",
         ":analysis:project-structure",
         ":analysis:analysis-api-standalone",
         ":analysis:analysis-api-standalone:analysis-api-standalone-base",
+        ":analysis:analysis-api-standalone:analysis-api-fir-standalone-base",
         ":analysis:analysis-api-fe10",
         ":analysis:decompiled:decompiler-to-psi",
         ":analysis:decompiled:decompiler-to-stubs",
@@ -746,10 +750,11 @@ project(':examples:annotation-processor-example').projectDir = "$rootDir/librari
 project(':kotlin-script-util').projectDir = "$rootDir/libraries/tools/kotlin-script-util" as File
 project(':kotlin-annotation-processing-embeddable').projectDir = "$rootDir/plugins/kapt3/kotlin-annotation-processing-embeddable" as File
 project(':kotlin-daemon-embeddable').projectDir = "$rootDir/prepare/kotlin-daemon-embeddable" as File
-project(':kotlin-annotation-processing').projectDir = "$rootDir/plugins/kapt3/kapt3-compiler" as File
+project(':kotlin-annotation-processing-compiler').projectDir = "$rootDir/plugins/kapt3/kapt3-compiler" as File
 project(':kotlin-annotation-processing-cli').projectDir = "$rootDir/plugins/kapt3/kapt3-cli" as File
 project(':kotlin-annotation-processing-base').projectDir = "$rootDir/plugins/kapt3/kapt3-base" as File
 project(':kotlin-annotation-processing-runtime').projectDir = "$rootDir/plugins/kapt3/kapt3-runtime" as File
+project(':kotlin-annotation-processing').projectDir = "$rootDir/plugins/kapt4" as File
 project(':kotlin-annotations-jvm').projectDir = "$rootDir/libraries/tools/kotlin-annotations-jvm" as File
 project(':kotlin-scripting-common').projectDir = "$rootDir/libraries/scripting/common" as File
 project(':kotlin-scripting-jvm').projectDir = "$rootDir/libraries/scripting/jvm" as File
@@ -803,6 +808,8 @@ project(':kotlin-scripting-ide-services-unshaded').projectDir = "$rootDir/plugin
 project(':kotlin-scripting-ide-services-test').projectDir = "$rootDir/plugins/scripting/scripting-ide-services-test" as File
 project(':kotlin-scripting-ide-services').projectDir = "$rootDir/plugins/scripting/scripting-ide-services-embeddable" as File
 project(':kotlin-scripting-ide-common').projectDir = "$rootDir/plugins/scripting/scripting-ide-common" as File
+project(':kotlin-scripting-compiler').projectDir = "$rootDir/plugins/scripting/scripting-compiler" as File
+project(':kotlin-scripting-compiler-impl').projectDir = "$rootDir/plugins/scripting/scripting-compiler-impl" as File
 
 // Uncomment to use locally built protobuf-relocated
 // includeBuild("dependencies/protobuf")

@@ -16,17 +16,18 @@ import kotlin.reflect.KClass
 import kotlin.reflect.KProperty1
 import kotlin.reflect.full.declaredMemberProperties
 import kotlin.reflect.full.withNullability
+import kotlin.reflect.jvm.javaField
 
-// Additional properties that should be included in interface
+// Additional properties that should be included
 @Suppress("unused")
-interface AdditionalGradleProperties {
+private class AdditionalGradleProperties {
     @GradleOption(
         value = DefaultValue.EMPTY_STRING_LIST_DEFAULT,
         gradleInputType = GradleInputTypes.INPUT,
         shouldGenerateDeprecatedKotlinOptions = true,
     )
     @Argument(value = "", description = "A list of additional compiler arguments")
-    var freeCompilerArgs: List<String>
+    var freeCompilerArgs = listOf<String>()
 }
 
 private data class GeneratedOptions(
@@ -720,9 +721,24 @@ private fun Printer.generateCompilerOptionsHelper(
         }
         println(") {")
         withIndent {
+            val multiValuesReturnTypes = setOf(
+                "org.gradle.api.provider.ListProperty",
+                "org.gradle.api.provider.SetProperty",
+            )
             if (parentHelperName != null) println("$parentHelperName.syncOptionsAsConvention(from, into)")
             for (property in properties) {
-                println("into.${property.name}.convention(from.${property.name})")
+
+                // Behaviour of ListProperty, SetProperty, MapProperty append operators in regard to convention value
+                // is confusing for users: https://github.com/gradle/gradle/issues/18352
+                // To make it less confusing for such types instead of wiring them via ".convention()" we updating
+                // current value
+                val gradleLazyReturnType = property.gradleLazyReturnType
+                val mapper = when {
+                    multiValuesReturnTypes.any { gradleLazyReturnType.startsWith(it) } -> "addAll"
+                    gradleLazyReturnType.startsWith("org.gradle.api.provider.MapProperty") -> "putAll"
+                    else -> "convention"
+                }
+                println("into.${property.name}.$mapper(from.${property.name})")
             }
         }
         println("}")
@@ -854,7 +870,7 @@ private fun Printer.generateOptionDeprecation(property: KProperty1<*, *>) {
 }
 
 private fun Printer.generateDoc(property: KProperty1<*, *>) {
-    val description = property.findAnnotation<Argument>()!!.description
+    val description = property.javaField!!.getAnnotation(Argument::class.java).description
     val possibleValues = property.gradleValues.possibleValues
     val defaultValue = property.gradleValues.defaultValue
 
@@ -881,7 +897,7 @@ private fun generateMarkdown(properties: List<KProperty1<*, *>>) {
         if (name == "includeRuntime") continue   // This option has no effect in Gradle builds
         val renderName = listOfNotNull("`$name`", property.findAnnotation<GradleDeprecatedOption>()?.let { "__(Deprecated)__" })
             .joinToString(" ")
-        val description = property.findAnnotation<Argument>()!!.description
+        val description = property.javaField!!.getAnnotation(Argument::class.java).description
         val possibleValues = property.gradleValues.possibleValues
         val defaultValue = when (property.gradleDefaultValue) {
             "null" -> ""

@@ -234,6 +234,15 @@ private fun unfoldBody(body: IrBody, callStack: CallStack) {
 }
 
 private fun unfoldBlock(block: IrBlock, callStack: CallStack) {
+    if (block is IrReturnableBlock) {
+        val inlinedDeclaration = block.inlineFunction?.originalFunction?.let { it.property ?: it }
+        if (inlinedDeclaration != null && inlinedDeclaration.hasAnnotation(intrinsicConstEvaluationAnnotation)) {
+            val inlinedBlock = block.statements.single() as IrInlinedFunctionBlock
+            callStack.pushCompoundInstruction(inlinedBlock.inlineCall)
+            return
+        }
+    }
+
     callStack.newSubFrame(block)
     callStack.pushSimpleInstruction(block)
     unfoldStatements(block.statements, callStack)
@@ -395,7 +404,7 @@ private fun unfoldStringConcatenation(expression: IrStringConcatenation, environ
     val explicitToStringCheck = fun() {
         when (val state = callStack.peekState()) {
             is Primitive<*> -> {
-                // This block is not really needed, but this way it is easier to handle `toString` with `treatFloatInSpecialWay` enabled.
+                // This block is not really needed, but this way it is easier to handle `toString` for JS.
                 callStack.popState()
                 val toStringCall = IrCallImpl.fromSymbolOwner(
                     UNDEFINED_OFFSET, UNDEFINED_OFFSET,

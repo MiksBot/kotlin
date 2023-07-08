@@ -12,8 +12,10 @@ import org.jetbrains.kotlin.ir.expressions.*
 import org.jetbrains.kotlin.ir.interpreter.accessesTopLevelOrObjectField
 import org.jetbrains.kotlin.ir.interpreter.fqName
 import org.jetbrains.kotlin.ir.interpreter.isAccessToNotNullableObject
+import org.jetbrains.kotlin.ir.interpreter.preprocessor.IrInterpreterKCallableNamePreprocessor.Companion.isEnumName
+import org.jetbrains.kotlin.ir.interpreter.preprocessor.IrInterpreterKCallableNamePreprocessor.Companion.isKCallableNameCall
 import org.jetbrains.kotlin.ir.types.*
-import org.jetbrains.kotlin.ir.util.constructors
+import org.jetbrains.kotlin.ir.util.fileOrNull
 import org.jetbrains.kotlin.ir.util.parentAsClass
 import org.jetbrains.kotlin.ir.util.statements
 
@@ -56,27 +58,21 @@ class IrInterpreterCommonChecker : IrInterpreterChecker {
     }
 
     override fun visitCall(expression: IrCall, data: IrInterpreterCheckerData): Boolean {
-        if (!data.mode.canEvaluateExpression(expression)) return false
-
         val owner = expression.symbol.owner
-        if (!data.mode.canEvaluateFunction(owner)) return false
-
-        // We disable `toFloat` folding on K/JS till `toFloat` is fixed (KT-35422)
-        // This check must be placed here instead of CallInterceptor because we still
-        // want to evaluate (1) `const val` expressions and (2) values in annotations.
-        if (owner.name.asString() == "toFloat" && data.interpreterConfiguration.treatFloatInSpecialWay) {
-            return super.visitCall(expression, data)
+        return when {
+            !data.interpreterConfiguration.inlineConstVal && expression.isGetterToConstVal() && data.irFile != owner.fileOrNull -> false
+            expression.dispatchReceiver.isAccessToNotNullableObject() && expression.isGetterToConstVal() -> visitBodyIfNeeded(owner, data)
+            !data.mode.canEvaluateExpression(expression) || !data.mode.canEvaluateFunction(owner) -> false
+            expression.isKCallableNameCall(data.irBuiltIns) || expression.isEnumName() -> true
+            else -> {
+                val dispatchReceiverComputable = expression.dispatchReceiver?.accept(this, data) ?: true
+                val extensionReceiverComputable = expression.extensionReceiver?.accept(this, data) ?: true
+                dispatchReceiverComputable &&
+                        extensionReceiverComputable &&
+                        visitValueArguments(expression, data) &&
+                        visitBodyIfNeeded(owner, data)
+            }
         }
-
-        if (expression.dispatchReceiver.isAccessToNotNullableObject()) {
-            return expression.isGetterToConstVal()
-        }
-
-        val dispatchReceiverComputable = expression.dispatchReceiver?.accept(this, data) ?: true
-        val extensionReceiverComputable = expression.extensionReceiver?.accept(this, data) ?: true
-        if (!visitValueArguments(expression, data)) return false
-        val bodyComputable = visitBodyIfNeeded(owner, data)
-        return dispatchReceiverComputable && extensionReceiverComputable && bodyComputable
     }
 
     override fun visitVariable(declaration: IrVariable, data: IrInterpreterCheckerData): Boolean {
@@ -121,10 +117,6 @@ class IrInterpreterCommonChecker : IrInterpreterChecker {
     }
 
     override fun visitConst(expression: IrConst<*>, data: IrInterpreterCheckerData): Boolean {
-        if (expression.type.getUnsignedType() != null) {
-            val constructor = expression.type.classOrNull?.owner?.constructors?.singleOrNull() ?: return false
-            return data.mode.canEvaluateFunction(constructor)
-        }
         return true
     }
 
@@ -153,8 +145,7 @@ class IrInterpreterCommonChecker : IrInterpreterChecker {
     }
 
     override fun visitGetObjectValue(expression: IrGetObjectValue, data: IrInterpreterCheckerData): Boolean {
-        // to get object value we need nothing, but it will contain only fields with compile time annotation
-        return true
+        return data.mode.canEvaluateExpression(expression)
     }
 
     override fun visitGetEnumValue(expression: IrGetEnumValue, data: IrInterpreterCheckerData): Boolean {
@@ -183,6 +174,7 @@ class IrInterpreterCommonChecker : IrInterpreterChecker {
             return owner.origin == IrDeclarationOrigin.IR_EXTERNAL_JAVA_DECLARATION_STUB && owner.isStatic && owner.isFinal &&
                     (owner.type.isPrimitiveType() || owner.type.isStringClassType())
         }
+
         return owner.asVisited {
             when {
                 // TODO fix later; used it here because java boolean resolves very strange,
@@ -192,7 +184,7 @@ class IrInterpreterCommonChecker : IrInterpreterChecker {
                 expression.receiver == null -> property?.isConst == true && owner.initializer?.accept(this, data) == true
                 owner.origin == IrDeclarationOrigin.PROPERTY_BACKING_FIELD && property?.isConst == true -> {
                     val receiverComputable = (expression.receiver?.accept(this, data) ?: true)
-                            || expression.isAccessToNotNullableObject()
+                            || expression.receiver.isAccessToNotNullableObject()
                     val initializerComputable = owner.initializer?.accept(this, data) ?: false
                     receiverComputable && initializerComputable
                 }

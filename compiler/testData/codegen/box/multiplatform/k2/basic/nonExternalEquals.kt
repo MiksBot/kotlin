@@ -1,6 +1,5 @@
 // !LANGUAGE: +MultiPlatformProjects
 // IGNORE_BACKEND_K1: ANY
-// IGNORE_BACKEND: WASM
 // MODULE: common
 // FILE: common.kt
 
@@ -21,7 +20,7 @@ actual open class Derived : Base() {
     override fun toString() = "Derived"
 
     // no operator modifier is legal because Base.plus is not expect
-    override fun plus(b: Base) = Derived()
+    override fun plus(b: Base): Base = Derived()
 }
 
 fun box() = "OK"

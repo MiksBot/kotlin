@@ -8,9 +8,9 @@ package org.jetbrains.kotlin.gradle.experimental
 import org.gradle.api.logging.LogLevel
 import org.gradle.util.GradleVersion
 import org.jetbrains.kotlin.cli.common.arguments.K2NativeCompilerArguments
+import org.jetbrains.kotlin.gradle.plugin.diagnostics.KotlinToolingDiagnostics
 import org.jetbrains.kotlin.gradle.testbase.*
 import org.jetbrains.kotlin.gradle.util.parseCompilerArgumentsFromBuildOutput
-import org.jetbrains.kotlin.gradle.utils.EXPERIMENTAL_TRY_K2_WARNING_MESSAGE
 import org.junit.jupiter.api.DisplayName
 import kotlin.io.path.appendText
 
@@ -29,8 +29,8 @@ class TryK2IT : KGPBaseTest() {
             enableTryK2()
 
             build("--dry-run") {
-                assertOutputContainsExactTimes(EXPERIMENTAL_TRY_K2_WARNING_MESSAGE, 1)
-                assertOutputContains("No Kotlin compilation tasks have run")
+                output.assertHasDiagnostic(KotlinToolingDiagnostics.ExperimentalK2Warning)
+                assertOutputContains("No Kotlin compilation tasks have been run")
             }
         }
     }
@@ -88,7 +88,7 @@ class TryK2IT : KGPBaseTest() {
                     |##### 'kotlin.experimental.tryK2' results (Kotlin/Native not checked) #####
                     |:lib:compileKotlin: 2.0 language version
                     |:app:compileKotlin: 2.0 language version
-                    |##### 100% (2/2) tasks have compiled with Kotlin 2 #####
+                    |##### 100% (2/2) tasks have been compiled with Kotlin 2.0 #####
                     """.trimMargin().normalizeLineEndings()
                 )
             }
@@ -119,7 +119,7 @@ class TryK2IT : KGPBaseTest() {
                     |##### 'kotlin.experimental.tryK2' results (Kotlin/Native not checked) #####
                     |:lib:compileKotlin: 2.0 language version
                     |:app:compileKotlin: 2.0 language version
-                    |##### 100% (2/2) tasks have compiled with Kotlin 2 #####
+                    |##### 100% (2/2) tasks have been compiled with Kotlin 2.0 #####
                     """.trimMargin().normalizeLineEndings()
                 )
             }

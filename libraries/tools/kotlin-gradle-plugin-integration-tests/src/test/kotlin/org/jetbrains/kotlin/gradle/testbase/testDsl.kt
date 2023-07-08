@@ -46,7 +46,7 @@ fun KGPBaseTest.project(
     buildJdk: File? = null,
     localRepoDir: Path? = null,
     environmentVariables: EnvironmentalVariables = EnvironmentalVariables(),
-    test: TestProject.() -> Unit = {}
+    test: TestProject.() -> Unit = {},
 ): TestProject {
     val projectPath = setupProjectFromTestResources(
         projectName,
@@ -108,7 +108,7 @@ fun KGPBaseTest.nativeProject(
     buildJdk: File? = null,
     localRepoDir: Path? = null,
     environmentVariables: EnvironmentalVariables = EnvironmentalVariables(),
-    test: TestProject.() -> Unit = {}
+    test: TestProject.() -> Unit = {},
 ): TestProject {
     val project = project(
         projectName = projectName,
@@ -131,7 +131,6 @@ fun KGPBaseTest.nativeProject(
 /**
  * Trigger test project build with given [buildArguments] and assert build is successful.
  */
-@OptIn(EnvironmentalVariablesOverride::class)
 fun TestProject.build(
     vararg buildArguments: String,
     forceOutput: Boolean = this.forceOutput,
@@ -141,7 +140,7 @@ fun TestProject.build(
     enableBuildScan: Boolean = this.enableBuildScan,
     buildOptions: BuildOptions = this.buildOptions,
     environmentVariables: EnvironmentalVariables = this.environmentVariables,
-    assertions: BuildResult.() -> Unit = {}
+    assertions: BuildResult.() -> Unit = {},
 ) {
     if (enableBuildScan) agreeToBuildScanService()
 
@@ -178,7 +177,7 @@ fun TestProject.buildAndFail(
     enableBuildScan: Boolean = this.enableBuildScan,
     buildOptions: BuildOptions = this.buildOptions,
     environmentVariables: EnvironmentalVariables = this.environmentVariables,
-    assertions: BuildResult.() -> Unit = {}
+    assertions: BuildResult.() -> Unit = {},
 ) {
     if (enableBuildScan) agreeToBuildScanService()
 
@@ -241,12 +240,14 @@ internal inline fun <reified T> TestProject.getModels(
 fun TestProject.enableLocalBuildCache(
     buildCacheLocation: Path,
 ) {
-    // language=Groovy
-    settingsGradle.append(
+
+    val settingsFile = if (Files.exists(settingsGradle)) settingsGradle else settingsGradleKts
+
+    settingsFile.append(
         """
         buildCache {
             local {
-                directory = '${buildCacheLocation.toUri()}'
+                directory = "${buildCacheLocation.toUri()}"
             }
         }
         """.trimIndent()
@@ -267,6 +268,13 @@ fun TestProject.enableStatisticReports(
         )
     }
 }
+
+fun String.wrapIntoBlock(s: String): String =
+    """
+        |$s {
+        |    $this
+        |}
+        """.trimMargin()
 
 open class GradleProject(
     val projectName: String,
@@ -306,7 +314,9 @@ open class GradleProject(
 }
 
 @JvmInline
-value class EnvironmentalVariables @EnvironmentalVariablesOverride constructor(val environmentalVariables: Map<String, String> = emptyMap())
+value class EnvironmentalVariables @EnvironmentalVariablesOverride constructor(val environmentalVariables: Map<String, String> = emptyMap()) {
+    @EnvironmentalVariablesOverride constructor(vararg environmentVariables: Pair<String, String>) : this(mapOf(*environmentVariables))
+}
 
 @RequiresOptIn("Environmental variables override may lead to interference of parallel builds and breaks Gradle tests debugging")
 annotation class EnvironmentalVariablesOverride
@@ -408,6 +418,8 @@ private fun commonBuildSetup(
     kotlinDaemonDebugPort: Int? = null,
 ): List<String> {
     return buildOptions.toArguments(gradleVersion) + buildArguments + listOfNotNull(
+        // Required toolchains should be pre-installed via repo. Tests should not download any JDKs
+        "-Porg.gradle.java.installations.auto-download=false",
         "--full-stacktrace",
         if (enableBuildCacheDebug) "-Dorg.gradle.caching.debug=true" else null,
         if (enableBuildScan) "--scan" else null,
@@ -465,7 +477,7 @@ private fun setupProjectFromTestResources(
         }
 }
 
-internal val String.testProjectPath: Path get() = Paths.get("src", "test", "resources", "testProject", this)
+private val String.testProjectPath: Path get() = Paths.get("src", "test", "resources", "testProject", this)
 
 internal fun Path.addDefaultBuildFiles() {
     addPluginManagementToSettings()

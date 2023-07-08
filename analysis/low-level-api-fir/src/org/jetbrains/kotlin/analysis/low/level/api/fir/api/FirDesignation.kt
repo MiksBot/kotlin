@@ -70,7 +70,7 @@ private fun collectDesignationPath(target: FirElementWithResolveState): List<Fir
 
             val containingClassId = target.containingClassLookupTag()?.classId ?: return emptyList()
 
-            if (target.origin == FirDeclarationOrigin.SubstitutionOverride) {
+            if (target.origin is FirDeclarationOrigin.SubstitutionOverride) {
                 val originalContainingClassId = target.originalForSubstitutionOverride?.containingClassLookupTag()?.classId
                 if (containingClassId == originalContainingClassId) {
                     // Ugly temporary hack for call-site substitution overrides (KTIJ-24004).
@@ -274,7 +274,7 @@ fun FirElementWithResolveState.tryCollectDesignationWithFile(): FirDesignationWi
         }
         is FirDeclaration -> {
             val path = collectDesignationPath(this) ?: return null
-            val firFile = getContainingFile() ?: return null
+            val firFile = path.lastOrNull()?.getContainingFile() ?: getContainingFile() ?: return null
             FirDesignationWithFile(path, this, firFile)
         }
         else -> unexpectedElementError<FirElementWithResolveState>(this)

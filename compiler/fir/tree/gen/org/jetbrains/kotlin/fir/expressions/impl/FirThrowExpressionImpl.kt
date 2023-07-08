@@ -3,7 +3,7 @@
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
-@file:Suppress("DuplicatedCode")
+@file:Suppress("DuplicatedCode", "unused")
 
 package org.jetbrains.kotlin.fir.expressions.impl
 
@@ -40,12 +40,17 @@ internal class FirThrowExpressionImpl(
     override fun <D> transformChildren(transformer: FirTransformer<D>, data: D): FirThrowExpressionImpl {
         typeRef = typeRef.transform(transformer, data)
         transformAnnotations(transformer, data)
-        exception = exception.transform(transformer, data)
+        transformException(transformer, data)
         return this
     }
 
     override fun <D> transformAnnotations(transformer: FirTransformer<D>, data: D): FirThrowExpressionImpl {
         annotations.transformInplace(transformer, data)
+        return this
+    }
+
+    override fun <D> transformException(transformer: FirTransformer<D>, data: D): FirThrowExpressionImpl {
+        exception = exception.transform(transformer, data)
         return this
     }
 

@@ -129,6 +129,46 @@ object ImplementationConfigurator : AbstractFirTreeImplementationConfigurator() 
             useTypes(explicitThisReferenceType, explicitSuperReferenceType)
         }
 
+        impl(multiDelegatedConstructorCall) {
+            default("source") {
+                value = "delegatedConstructorCalls.last().source"
+                withGetter = true
+            }
+            default("annotations") {
+                value = "delegatedConstructorCalls.last().annotations"
+                withGetter = true
+            }
+            default("argumentList") {
+                value = "delegatedConstructorCalls.last().argumentList"
+                withGetter = true
+            }
+            default("contextReceiverArguments") {
+                value = "delegatedConstructorCalls.last().contextReceiverArguments"
+                withGetter = true
+            }
+            default("constructedTypeRef") {
+                value = "delegatedConstructorCalls.last().constructedTypeRef"
+                withGetter = true
+            }
+            default("dispatchReceiver") {
+                value = "delegatedConstructorCalls.last().dispatchReceiver"
+                withGetter = true
+            }
+            default("calleeReference") {
+                value = "delegatedConstructorCalls.last().calleeReference"
+                withGetter = true
+            }
+            default("isThis") {
+                value = "delegatedConstructorCalls.last().isThis"
+                withGetter = true
+            }
+            default("isSuper") {
+                value = "!isThis"
+                withGetter = true
+            }
+            publicImplementation()
+        }
+
         impl(delegatedConstructorCall, "FirLazyDelegatedConstructorCall") {
             val error = """error("FirLazyDelegatedConstructorCall should be calculated before accessing")"""
             default("source") {
@@ -378,7 +418,7 @@ object ImplementationConfigurator : AbstractFirTreeImplementationConfigurator() 
 
         impl(whenSubjectExpression) {
             default("typeRef") {
-                value = "whenRef.value.subject!!.typeRef"
+                value = "whenRef.value.subject?.typeRef ?: org.jetbrains.kotlin.fir.types.impl.FirImplicitUnitTypeRef(source)"
                 withGetter = true
             }
             useTypes(whenExpression)
@@ -444,6 +484,7 @@ object ImplementationConfigurator : AbstractFirTreeImplementationConfigurator() 
                 value = "null"
                 isMutable = true
             }
+            defaultFalse("isImplicit")
         }
 
         impl(thisReference, "FirImplicitThisReference") {
@@ -455,6 +496,7 @@ object ImplementationConfigurator : AbstractFirTreeImplementationConfigurator() 
             default("boundSymbol") {
                 isMutable = false
             }
+            defaultTrue("isImplicit")
         }
 
         impl(superReference, "FirExplicitSuperReference")
@@ -626,7 +668,8 @@ object ImplementationConfigurator : AbstractFirTreeImplementationConfigurator() 
             "FirReceiverParameterImpl",
             "FirClassReferenceExpressionImpl",
             "FirGetClassCallImpl",
-            "FirSmartCastExpressionImpl"
+            "FirSmartCastExpressionImpl",
+            "FirInaccessibleReceiverExpressionImpl"
         )
         configureFieldInAllImplementations(
             field = "typeRef",

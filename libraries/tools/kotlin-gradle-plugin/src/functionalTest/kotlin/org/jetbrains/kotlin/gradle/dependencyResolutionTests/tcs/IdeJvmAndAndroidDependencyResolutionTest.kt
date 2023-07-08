@@ -9,6 +9,9 @@ package org.jetbrains.kotlin.gradle.dependencyResolutionTests.tcs
 
 import org.gradle.api.Project
 import org.jetbrains.kotlin.gradle.dependencyResolutionTests.mavenCentralCacheRedirector
+import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformSourceSetConventionsImpl.commonMain
+import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformSourceSetConventionsImpl.commonTest
+import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformSourceSetConventionsImpl.dependencies
 import org.jetbrains.kotlin.gradle.dsl.multiplatformExtension
 import org.jetbrains.kotlin.gradle.idea.tcs.IdeaKotlinResolvedBinaryDependency
 import org.jetbrains.kotlin.gradle.idea.testFixtures.tcs.*
@@ -24,7 +27,7 @@ class IdeJvmAndAndroidDependencyResolutionTest {
 
     @BeforeTest
     fun checkEnvironment() {
-        assumeAndroidSdkAvailable()
+        assertAndroidSdkAvailable()
     }
 
     private fun Project.configureAndroidAndMultiplatform(enableDefaultStdlib: Boolean = false) {
@@ -37,7 +40,7 @@ class IdeJvmAndAndroidDependencyResolutionTest {
         if (enableDefaultStdlib) repositories.mavenLocal()
         repositories.mavenCentralCacheRedirector()
 
-        project.multiplatformExtension.targetHierarchy.custom {
+        project.multiplatformExtension.applyHierarchyTemplate {
             common {
                 group("jvmAndAndroid") {
                     withJvm()
@@ -109,6 +112,33 @@ class IdeJvmAndAndroidDependencyResolutionTest {
             friendSourceDependency(":consumer/jvmAndAndroidMain"),
             regularSourceDependency(":producer/commonMain"),
             regularSourceDependency(":producer/jvmAndAndroidMain"),
+        )
+    }
+
+    @Test
+    fun `test - KT-59020 - transitive project dependency to self`() {
+        val root = buildProject { setMultiplatformAndroidSourceSetLayoutVersion(2) }
+        val a = buildProject({ withParent(root).withName("a") }) { configureAndroidAndMultiplatform() }
+        val b = buildProject({ withParent(root).withName("b") }) { configureAndroidAndMultiplatform() }
+
+        b.multiplatformExtension.sourceSets.commonMain.dependencies {
+            api(project(":a"))
+        }
+
+        a.multiplatformExtension.sourceSets.commonTest.dependencies {
+            api(project(":b"))
+        }
+
+        root.evaluate()
+        a.evaluate()
+        b.evaluate()
+
+        a.kotlinIdeMultiplatformImport.resolveDependencies("jvmAndAndroidTest").assertMatches(
+            friendSourceDependency(":a/commonMain"),
+            friendSourceDependency(":a/jvmAndAndroidMain"),
+            dependsOnDependency(":a/commonTest"),
+            regularSourceDependency(":b/commonMain"),
+            regularSourceDependency(":b/jvmAndAndroidMain"),
         )
     }
 

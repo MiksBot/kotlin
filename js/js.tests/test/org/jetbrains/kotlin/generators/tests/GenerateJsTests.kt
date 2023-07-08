@@ -8,6 +8,7 @@ package org.jetbrains.kotlin.generators.tests
 import org.jetbrains.kotlin.generators.generateTestGroupSuiteWithJUnit5
 import org.jetbrains.kotlin.generators.impl.generateTestGroupSuite
 import org.jetbrains.kotlin.incremental.AbstractJsIrES6InvalidationTest
+import org.jetbrains.kotlin.incremental.AbstractJsIrInvalidationWithPLTest
 import org.jetbrains.kotlin.incremental.AbstractJsIrInvalidationTest
 import org.jetbrains.kotlin.incremental.AbstractJsFirInvalidationTest
 import org.jetbrains.kotlin.js.test.*
@@ -16,6 +17,7 @@ import org.jetbrains.kotlin.js.test.ir.*
 import org.jetbrains.kotlin.js.testOld.AbstractDceTest
 import org.jetbrains.kotlin.test.TargetBackend
 import org.jetbrains.kotlin.js.test.fir.AbstractFirLightTreeJsIrTextTest
+import org.jetbrains.kotlin.js.test.ir.AbstractMultiModuleOrderTest
 import org.jetbrains.kotlin.js.testOld.klib.AbstractClassicJsKlibEvolutionTest
 import org.jetbrains.kotlin.js.testOld.klib.AbstractFirJsKlibEvolutionTest
 
@@ -82,19 +84,16 @@ fun main(args: Array<String>) {
             testClass<AbstractJsFirInvalidationTest> {
                 model("incremental/invalidation/", pattern = "^([^_](.+))$", targetBackend = TargetBackend.JS_IR, recursive = false)
             }
+
+            testClass<AbstractJsIrInvalidationWithPLTest> {
+                model("incremental/invalidationWithPL/", pattern = "^([^_](.+))$", targetBackend = TargetBackend.JS_IR, recursive = false)
+            }
         }
 
         testGroup("js/js.tests/tests-gen", "js/js.translator/testData", testRunnerMethodName = "runTest0") {
-            testClass<AbstractBoxJsTest> {
-                model("box/", pattern = "^([^_](.+))\\.kt$", excludeDirs = listOf("closure/inlineAnonymousFunctions", "es6classes"))
-            }
 
             testClass<AbstractSourceMapGenerationSmokeTest> {
                 model("sourcemap/")
-            }
-
-            testClass<AbstractOutputPrefixPostfixTest> {
-                model("outputPrefixPostfix/")
             }
 
             testClass<AbstractMultiModuleOrderTest> {
@@ -103,10 +102,6 @@ fun main(args: Array<String>) {
 
             testClass<AbstractWebDemoExamplesTest> {
                 model("webDemoExamples/")
-            }
-
-            testClass<AbstractJsLineNumberTest> {
-                model("lineNumbers/")
             }
 
             testClass<AbstractIrBoxJsTest> {
@@ -141,17 +136,6 @@ fun main(args: Array<String>) {
         }
 
         testGroup("js/js.tests/tests-gen", "compiler/testData", testRunnerMethodName = "runTest0") {
-            testClass<AbstractJsCodegenBoxTest> {
-                model("codegen/box", excludeDirs = jvmOnlyBoxTests)
-            }
-
-            testClass<AbstractJsCodegenInlineTest> {
-                model("codegen/boxInline")
-            }
-
-            testClass<AbstractJsLegacyPrimitiveArraysBoxTest> {
-                model("codegen/box/arrays")
-            }
 
             testClass<AbstractIrJsCodegenBoxTest> {
                 model("codegen/box", excludeDirs = jvmOnlyBoxTests)
@@ -225,6 +209,11 @@ fun main(args: Array<String>) {
 //            testClass<AbstractFirJsSteppingTest> {
 //                model("debug/stepping")
 //            }
+
+            testClass<AbstractFirLoadK2CompiledJsKotlinTest> {
+                model("loadJava/compiledKotlin", extension = "kt")
+                model("loadJava/compiledKotlinWithStdlib", extension = "kt")
+            }
         }
     }
 }

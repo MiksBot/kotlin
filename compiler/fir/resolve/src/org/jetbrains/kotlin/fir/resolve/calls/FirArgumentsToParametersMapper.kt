@@ -243,7 +243,7 @@ private class FirCallArgumentsProcessor(
         val parameter = findParameterByName(argument) ?: return
 
         result[parameter]?.let {
-            addDiagnostic(ArgumentPassedTwice(argument, parameter, it))
+            addDiagnostic(ArgumentPassedTwice(argument, parameter))
             return
         }
 
@@ -304,7 +304,7 @@ private class FirCallArgumentsProcessor(
             if (!result.containsKey(parameter)) {
                 when {
                     bodyResolveComponents.session.defaultParameterResolver.declaresDefaultValue(
-                        useSiteSession, bodyResolveComponents.scopeSession, parameter, function, originScope, index
+                        useSiteSession, bodyResolveComponents.scopeSession, function, originScope, index
                     ) ->
                         result[parameter] = ResolvedCallArgument.DefaultArgument
                     parameter.isVararg ->
@@ -349,7 +349,7 @@ private class FirCallArgumentsProcessor(
             val someName = someParameter?.name
             if (someName != null && someName != argument.name) {
                 addDiagnostic(
-                    NameForAmbiguousParameter(argument, matchedParameter = parameter!!, someParameter)
+                    NameForAmbiguousParameter(argument)
                 )
                 return ProcessorAction.STOP
             }
@@ -375,7 +375,7 @@ private class FirCallArgumentsProcessor(
                             val someParameter = allowedParameters?.getOrNull(matchedIndex)?.fir
                             if (someParameter != null) {
                                 addDiagnostic(
-                                    NameForAmbiguousParameter(argument, matchedParameter = parameter!!, anotherParameter = someParameter)
+                                    NameForAmbiguousParameter(argument)
                                 )
                                 ProcessorAction.STOP
                             } else {

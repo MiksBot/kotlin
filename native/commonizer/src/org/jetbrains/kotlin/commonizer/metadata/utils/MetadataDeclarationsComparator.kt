@@ -3,10 +3,13 @@
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
+@file:Suppress("DEPRECATION") // TODO: kotlinx.metadata Flags API. Usage here is too big.
+
 package org.jetbrains.kotlin.commonizer.metadata.utils
 
 import com.intellij.util.containers.FactoryMap
 import kotlinx.metadata.*
+import kotlinx.metadata.internal.common.KmModuleFragment
 import kotlinx.metadata.klib.*
 import org.jetbrains.kotlin.commonizer.metadata.utils.MetadataDeclarationsComparator.EntityKind.*
 import org.jetbrains.kotlin.commonizer.metadata.utils.MetadataDeclarationsComparator.Mismatch
@@ -971,8 +974,8 @@ class MetadataDeclarationsComparator private constructor(private val config: Con
 
     private fun compareFlags(
         containerContext: Context,
-        flagsA: Flags,
-        flagsB: Flags,
+        flagsA: Int,
+        flagsB: Int,
         flagsToCompare: Array<KProperty0<Flag>>,
         flagKind: FlagKind = FlagKind.REGULAR
     ) {

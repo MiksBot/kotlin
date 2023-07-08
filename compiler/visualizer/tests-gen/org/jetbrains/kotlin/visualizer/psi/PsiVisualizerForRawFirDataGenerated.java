@@ -184,6 +184,12 @@ public class PsiVisualizerForRawFirDataGenerated extends AbstractPsiVisualizerTe
         }
 
         @Test
+        @TestMetadata("invalidDestructing.kt")
+        public void testInvalidDestructing() throws Exception {
+            runTest("compiler/fir/raw-fir/psi2fir/testData/rawBuilder/declarations/invalidDestructing.kt");
+        }
+
+        @Test
         @TestMetadata("nestedClass.kt")
         public void testNestedClass() throws Exception {
             runTest("compiler/fir/raw-fir/psi2fir/testData/rawBuilder/declarations/nestedClass.kt");
@@ -483,6 +489,12 @@ public class PsiVisualizerForRawFirDataGenerated extends AbstractPsiVisualizerTe
         @TestMetadata("init.kt")
         public void testInit() throws Exception {
             runTest("compiler/fir/raw-fir/psi2fir/testData/rawBuilder/expressions/init.kt");
+        }
+
+        @Test
+        @TestMetadata("invalidWhen.kt")
+        public void testInvalidWhen() throws Exception {
+            runTest("compiler/fir/raw-fir/psi2fir/testData/rawBuilder/expressions/invalidWhen.kt");
         }
 
         @Test

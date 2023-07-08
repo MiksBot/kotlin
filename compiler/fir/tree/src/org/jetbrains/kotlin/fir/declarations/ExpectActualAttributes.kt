@@ -10,7 +10,6 @@ import org.jetbrains.kotlin.fir.symbols.SymbolInternals
 import org.jetbrains.kotlin.fir.symbols.impl.FirFunctionSymbol
 import org.jetbrains.kotlin.fir.symbols.lazyResolveToPhase
 import org.jetbrains.kotlin.resolve.multiplatform.ExpectActualCompatibility
-import org.jetbrains.kotlin.resolve.multiplatform.compatible
 
 private object ExpectForActualAttributeKey : FirDeclarationDataKey()
 
@@ -19,22 +18,11 @@ typealias ExpectForActualData = Map<ExpectActualCompatibility<FirBasedSymbol<*>>
 @SymbolInternals
 var FirDeclaration.expectForActual: ExpectForActualData? by FirDeclarationDataRegistry.data(ExpectForActualAttributeKey)
 
-fun FirFunctionSymbol<*>.getSingleCompatibleExpectForActualOrNull() =
-    (this as FirBasedSymbol<*>).getSingleCompatibleExpectForActualOrNull() as? FirFunctionSymbol<*>
+fun FirFunctionSymbol<*>.getSingleExpectForActualOrNull(): FirFunctionSymbol<*>? =
+    (this as FirBasedSymbol<*>).getSingleExpectForActualOrNull() as? FirFunctionSymbol<*>
 
-fun FirBasedSymbol<*>.getSingleCompatibleExpectForActualOrNull(): FirBasedSymbol<*>? {
-    val expectForActual = expectForActual ?: return null
-    var compatibleActuals: List<FirBasedSymbol<*>>? = null
-    for ((key, item) in expectForActual) {
-        if (key.compatible) {
-            if (compatibleActuals == null) {
-                compatibleActuals = item
-            } else {
-                return null // Exit if there are more than one list with compatible actuals
-            }
-        }
-    }
-    return compatibleActuals?.singleOrNull()
+fun FirBasedSymbol<*>.getSingleExpectForActualOrNull(): FirBasedSymbol<*>? {
+    return expectForActual?.values?.singleOrNull()?.singleOrNull()
 }
 
 val FirBasedSymbol<*>.expectForActual: ExpectForActualData?

@@ -28,7 +28,7 @@ scopes:
 
   LocalScope, index = 1, empty
 
-  SimpleTypeScope, index = 2
+  TypeScope, index = 2
     classifiers: 0
     callables: 5
       KtKotlinPropertySymbol:
@@ -311,6 +311,4 @@ scopes:
   DefaultSimpleImportingScope, index = 10
 
   DefaultStarImportingScope, index = 11
-
-  DefaultStarImportingScope, index = 12
 

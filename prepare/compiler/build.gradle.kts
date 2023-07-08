@@ -86,14 +86,14 @@ val outputJar = fileFrom(buildDir, "libs", "$compilerBaseName.jar")
 val compilerModules: Array<String> by rootProject.extra
 
 val distLibraryProjects = listOfNotNull(
-    ":kotlin-annotation-processing",
+    ":kotlin-annotation-processing-compiler",
     ":kotlin-annotation-processing-cli",
     ":kotlin-annotation-processing-runtime",
+    ":kotlin-annotation-processing",
     ":kotlin-annotations-jvm",
     ":kotlin-ant",
     ":kotlin-daemon",
     ":kotlin-daemon-client",
-    // TODO: uncomment when new daemon will be put back into dist
     ":kotlin-imports-dumper-compiler-plugin",
     ":kotlin-main-kts",
     ":kotlin-preloader",
@@ -126,7 +126,8 @@ val distCompilerPluginProjects = listOf(
     ":kotlin-sam-with-receiver-compiler-plugin",
     ":kotlinx-serialization-compiler-plugin",
     ":kotlin-lombok-compiler-plugin",
-    ":kotlin-assignment-compiler-plugin"
+    ":kotlin-assignment-compiler-plugin",
+    ":kotlin-scripting-compiler"
 )
 val distCompilerPluginProjectsCompat = listOf(
     ":kotlinx-serialization-compiler-plugin",
@@ -251,6 +252,13 @@ dependencies {
 
 publish()
 
+// sbom for dist
+val distSbomTask = configureSbom(
+    target = "Dist",
+    documentName = "Kotlin Compiler Distribution",
+    setOf(configurations.runtimeClasspath.name, libraries.name, librariesStripVersion.name, compilerPlugins.name)
+)
+
 val packCompiler by task<Jar> {
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     destinationDirectory.set(File(buildDir, "libs"))
@@ -317,17 +325,17 @@ val proguard by task<CacheableProguardTask> {
                     "jre/lib/rt.jar",
                     "../Classes/classes.jar",
                     jdkHome = it.metadata.installationPath.asFile
-                )
+                )!!
             },
             javaLauncher.map {
                 firstFromJavaHomeThatExists(
                     "jre/lib/jsse.jar",
                     "../Classes/jsse.jar",
                     jdkHome = it.metadata.installationPath.asFile
-                )
+                )!!
             },
             javaLauncher.map {
-                Jvm.forHome(it.metadata.installationPath.asFile).toolsJar
+                Jvm.forHome(it.metadata.installationPath.asFile).toolsJar!!
             }
         )
     )
@@ -429,12 +437,6 @@ val distJs = distTask<Sync>("distJs") {
     from(distJSContents)
 }
 
-val compilerZipSbomName = "kotlin-compiler-zip"
-val compilerZipSbom = configureSbom(
-    moduleName = compilerZipSbomName,
-    gradleConfigurations = setOf("runtimeClasspath", libraries.name, librariesStripVersion.name, compilerPlugins.name)
-)
-
 distTask<Copy>("dist") {
     destinationDir = File(distDir)
 
@@ -442,11 +444,12 @@ distTask<Copy>("dist") {
     dependsOn(distCommon)
     dependsOn(distMaven)
     dependsOn(distJs)
+    dependsOn(distSbomTask)
 
     from(buildNumber)
     from(distStdlibMinimalForTests)
-    from(compilerZipSbom.artifacts.files) {
-        rename("$compilerZipSbomName.spdx.json", "${project.name}-${project.version}.spdx.json")
+    from(distSbomTask.map { it.outputDirectory.file("Dist.spdx.json") }) {
+        rename(".*", "${project.name}-${project.version}.spdx.json")
     }
 }
 

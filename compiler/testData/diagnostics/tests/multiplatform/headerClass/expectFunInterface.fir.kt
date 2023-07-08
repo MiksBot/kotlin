@@ -5,9 +5,9 @@ expect fun interface F1 {
     fun run()
 }
 
-expect fun interface F2 {
+<!INCOMPATIBLE_MATCHING{JVM}!>expect fun interface F2 {
     fun run()
-}
+}<!>
 
 expect fun interface F3 {
     fun run()
@@ -21,19 +21,30 @@ expect fun interface F5 {
     fun run()
 }
 
-expect fun interface F6 {
+<!INCOMPATIBLE_MATCHING{JVM}!>expect fun interface F6 {
+    fun run()
+}<!>
+
+expect fun interface F7 {
     fun run()
 }
 
 // MODULE: m2-jvm()()(m1-common)
 
+// FILE: NotSam.java
+public interface NotSam {
+    void run();
+    void somehtingElse();
+}
+
+// FILE: main.kt
 actual fun interface F1 {
     actual fun run()
 }
 
-<!ACTUAL_WITHOUT_EXPECT!>actual interface F2 {
+actual interface <!ACTUAL_WITHOUT_EXPECT!>F2<!> {
     actual fun run()
-}<!>
+}
 
 actual typealias F3 = java.lang.Runnable
 
@@ -51,4 +62,6 @@ interface F6Typealias {
     fun run()
 }
 
-<!ACTUAL_WITHOUT_EXPECT!>actual typealias F6 = F6Typealias<!>
+actual typealias <!ACTUAL_WITHOUT_EXPECT!>F6<!> = F6Typealias
+
+actual typealias <!ACTUAL_WITHOUT_EXPECT!>F7<!> = NotSam

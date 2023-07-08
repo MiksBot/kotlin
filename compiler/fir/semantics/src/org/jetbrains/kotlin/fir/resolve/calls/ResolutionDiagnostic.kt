@@ -43,15 +43,14 @@ class TooManyArguments(
 ) : ResolutionDiagnostic(INAPPLICABLE_ARGUMENTS_MAPPING_ERROR)
 
 class NamedArgumentNotAllowed(
-    override val argument: FirExpression,
+    val argument: FirExpression,
     val function: FirFunction,
     val forbiddenNamedArgumentsTarget: ForbiddenNamedArgumentsTarget
-) : InapplicableArgumentDiagnostic()
+) : ResolutionDiagnostic(INAPPLICABLE_ARGUMENTS_MAPPING_ERROR)
 
 class ArgumentPassedTwice(
     override val argument: FirExpression,
-    val valueParameter: FirValueParameter,
-    val firstOccurrence: ResolvedCallArgument
+    val valueParameter: FirValueParameter
 ) : InapplicableArgumentDiagnostic()
 
 class VarargArgumentOutsideParentheses(
@@ -72,9 +71,7 @@ class NameNotFound(
 ) : ResolutionDiagnostic(INAPPLICABLE_ARGUMENTS_MAPPING_ERROR)
 
 class NameForAmbiguousParameter(
-    val argument: FirNamedArgumentExpression,
-    val matchedParameter: FirValueParameter,
-    val anotherParameter: FirValueParameter
+    val argument: FirNamedArgumentExpression
 ) : ResolutionDiagnostic(INAPPLICABLE_ARGUMENTS_MAPPING_ERROR)
 
 object InapplicableCandidate : ResolutionDiagnostic(INAPPLICABLE)
@@ -126,7 +123,7 @@ class InfixCallOfNonInfixFunction(val function: FirNamedFunctionSymbol) : Resolu
 class OperatorCallOfNonOperatorFunction(val function: FirNamedFunctionSymbol) : ResolutionDiagnostic(CONVENTION_ERROR)
 
 class InferenceError(val constraintError: ConstraintSystemError) : ResolutionDiagnostic(constraintError.applicability)
-class Unsupported(val message: String, val source: KtSourceElement? = null) : ResolutionDiagnostic(K2_UNSUPPORTED)
+class Unsupported(val message: String, val source: KtSourceElement?) : ResolutionDiagnostic(K2_UNSUPPORTED)
 
 object PropertyAsOperator : ResolutionDiagnostic(K2_PROPERTY_AS_OPERATOR)
 
@@ -141,5 +138,3 @@ class NoApplicableValueForContextReceiver(
 class AmbiguousValuesForContextReceiverParameter(
     val expectedContextReceiverType: ConeKotlinType,
 ) : ResolutionDiagnostic(INAPPLICABLE)
-
-object InaccessibleReceiver : ResolutionDiagnostic(RESOLVED_WITH_ERROR)

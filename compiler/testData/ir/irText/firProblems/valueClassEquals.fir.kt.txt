@@ -26,12 +26,12 @@ value class Z {
   }
 
   override fun toString(): String {
-    return "Z(s=" + <this>.#s + ")"
+    return "Z(" + "s=" + <this>.#s + ")"
   }
 
 }
 
 val equals: KFunction2<Z, Any?, Boolean>
-  field = Any::equals
+  field = Z::equals
   get
 

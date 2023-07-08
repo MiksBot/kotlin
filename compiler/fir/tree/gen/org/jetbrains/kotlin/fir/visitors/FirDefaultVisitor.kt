@@ -48,6 +48,7 @@ import org.jetbrains.kotlin.fir.declarations.FirBackingField
 import org.jetbrains.kotlin.fir.declarations.FirConstructor
 import org.jetbrains.kotlin.fir.declarations.FirFile
 import org.jetbrains.kotlin.fir.declarations.FirScript
+import org.jetbrains.kotlin.fir.declarations.FirCodeFragment
 import org.jetbrains.kotlin.fir.FirPackageDirective
 import org.jetbrains.kotlin.fir.declarations.FirAnonymousFunction
 import org.jetbrains.kotlin.fir.expressions.FirAnonymousFunctionExpression
@@ -105,9 +106,11 @@ import org.jetbrains.kotlin.fir.expressions.FirFunctionCall
 import org.jetbrains.kotlin.fir.expressions.FirIntegerLiteralOperatorCall
 import org.jetbrains.kotlin.fir.expressions.FirImplicitInvokeCall
 import org.jetbrains.kotlin.fir.expressions.FirDelegatedConstructorCall
+import org.jetbrains.kotlin.fir.expressions.FirMultiDelegatedConstructorCall
 import org.jetbrains.kotlin.fir.expressions.FirComponentCall
 import org.jetbrains.kotlin.fir.expressions.FirCallableReferenceAccess
 import org.jetbrains.kotlin.fir.expressions.FirThisReceiverExpression
+import org.jetbrains.kotlin.fir.expressions.FirInaccessibleReceiverExpression
 import org.jetbrains.kotlin.fir.expressions.FirSmartCastExpression
 import org.jetbrains.kotlin.fir.expressions.FirSafeCallExpression
 import org.jetbrains.kotlin.fir.expressions.FirCheckedSafeCallSubject
@@ -186,6 +189,8 @@ abstract class FirDefaultVisitor<out R, in D> : FirVisitor<R, D>() {
 
     override fun visitScript(script: FirScript, data: D): R  = visitDeclaration(script, data)
 
+    override fun visitCodeFragment(codeFragment: FirCodeFragment, data: D): R  = visitDeclaration(codeFragment, data)
+
     override fun visitAnonymousFunctionExpression(anonymousFunctionExpression: FirAnonymousFunctionExpression, data: D): R  = visitExpression(anonymousFunctionExpression, data)
 
     override fun visitAnonymousObject(anonymousObject: FirAnonymousObject, data: D): R  = visitClass(anonymousObject, data)
@@ -239,6 +244,8 @@ abstract class FirDefaultVisitor<out R, in D> : FirVisitor<R, D>() {
     override fun visitIntegerLiteralOperatorCall(integerLiteralOperatorCall: FirIntegerLiteralOperatorCall, data: D): R  = visitFunctionCall(integerLiteralOperatorCall, data)
 
     override fun visitImplicitInvokeCall(implicitInvokeCall: FirImplicitInvokeCall, data: D): R  = visitFunctionCall(implicitInvokeCall, data)
+
+    override fun visitMultiDelegatedConstructorCall(multiDelegatedConstructorCall: FirMultiDelegatedConstructorCall, data: D): R  = visitDelegatedConstructorCall(multiDelegatedConstructorCall, data)
 
     override fun visitComponentCall(componentCall: FirComponentCall, data: D): R  = visitFunctionCall(componentCall, data)
 

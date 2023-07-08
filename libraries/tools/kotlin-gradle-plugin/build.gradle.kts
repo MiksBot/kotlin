@@ -1,5 +1,7 @@
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 import com.github.jengelman.gradle.plugins.shadow.transformers.DontIncludeResourceTransformer
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 import org.jetbrains.kotlin.pill.PillExtension
 
 plugins {
@@ -18,17 +20,24 @@ pill {
     variant = PillExtension.Variant.FULL
 }
 
-kotlin.sourceSets.all {
-    languageSettings.optIn("kotlin.RequiresOptIn")
-    languageSettings.optIn("org.jetbrains.kotlin.gradle.plugin.mpp.pm20.AdvancedKotlinGradlePluginApi")
-    languageSettings.optIn("org.jetbrains.kotlin.gradle.InternalKotlinGradlePluginApi")
-    languageSettings.optIn("org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi")
-    languageSettings.optIn("org.jetbrains.kotlin.gradle.ExternalKotlinTargetApi")
-    languageSettings.optIn("org.jetbrains.kotlin.compiler.plugin.ExperimentalCompilerApi")
+kotlin {
+    compilerOptions {
+        optIn.addAll(
+            listOf(
+                "kotlin.RequiresOptIn",
+                "org.jetbrains.kotlin.gradle.plugin.mpp.pm20.AdvancedKotlinGradlePluginApi",
+                "org.jetbrains.kotlin.gradle.InternalKotlinGradlePluginApi",
+                "org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi",
+                "org.jetbrains.kotlin.gradle.ExternalKotlinTargetApi",
+                "org.jetbrains.kotlin.compiler.plugin.ExperimentalCompilerApi",
+            )
+        )
+    }
 }
 
 apiValidation {
     publicMarkers.add("org.jetbrains.kotlin.gradle.ExternalKotlinTargetApi")
+    publicMarkers.add("org.jetbrains.kotlin.gradle.dsl.KotlinGradlePluginDsl")
     nonPublicMarkers.add("org.jetbrains.kotlin.gradle.InternalKotlinGradlePluginApi")
     additionalSourceSets.add("common")
 }
@@ -37,30 +46,52 @@ dependencies {
     commonApi(platform(project(":kotlin-gradle-plugins-bom")))
     commonApi(project(":kotlin-gradle-plugin-api"))
     commonApi(project(":kotlin-gradle-plugin-model"))
-    commonApi(project(":kotlin-tooling-core"))
 
-    commonCompileOnly(project(":compiler"))
+    // Following two dependencies is a workaround for IDEA import to pick-up them correctly
+    commonCompileOnly(project(":kotlin-gradle-plugin-api")) {
+        capabilities {
+            requireCapability("org.jetbrains.kotlin:kotlin-gradle-plugin-api-common")
+        }
+    }
+    commonCompileOnly(project(":kotlin-gradle-plugin-model")) {
+        capabilities {
+            requireCapability("org.jetbrains.kotlin:kotlin-gradle-plugin-model-common")
+        }
+    }
+
     commonCompileOnly(project(":compiler:incremental-compilation-impl"))
     commonCompileOnly(project(":daemon-common"))
+    commonCompileOnly(project(":kotlin-daemon-client"))
     commonCompileOnly(project(":kotlin-gradle-compiler-types"))
-    commonCompileOnly(project(":native:kotlin-native-utils"))
     commonCompileOnly(project(":kotlin-android-extensions"))
-    commonCompileOnly(project(":kotlin-build-common"))
-    commonCompileOnly(project(":kotlin-compiler-runner"))
+    commonCompileOnly(project(":kotlin-compiler-runner-unshaded"))
     commonCompileOnly(project(":kotlin-annotation-processing"))
     commonCompileOnly(project(":kotlin-scripting-compiler"))
     commonCompileOnly(project(":kotlin-gradle-statistics"))
     commonCompileOnly(project(":kotlin-gradle-build-metrics"))
-    commonCompileOnly("com.android.tools.build:gradle:4.2.2")
-    commonCompileOnly("com.android.tools.build:gradle-api:4.2.2")
-    commonCompileOnly("com.android.tools.build:builder:4.2.2")
-    commonCompileOnly("com.android.tools.build:builder-model:4.2.2")
-    commonCompileOnly("org.codehaus.groovy:groovy-all:2.4.12")
+    commonCompileOnly("com.android.tools.build:gradle:4.2.2") {
+        exclude("org.ow2.asm")
+        exclude("net.sf.proguard")
+        exclude("net.sf.jopt-simple")
+        exclude("com.squareup")
+        exclude("com.google.crypto.tink")
+        exclude("com.google.guava")
+        exclude("com.google.protobuf")
+        exclude("com.google.testing.platform")
+        exclude("com.android.tools.lint")
+        exclude("androidx.databinding")
+        exclude("com.android.tools.analytics-library")
+        exclude("com.android.tools.build.jetifier")
+        exclude("com.android.tools.build", "transform-api")
+        exclude("com.android.tools.build", "builder-test-api")
+        exclude("com.android.tools.build", "bundletool")
+        exclude("com.android.tools.build", "aaptcompiler")
+        exclude("com.android.tools.build", "aapt2-proto")
+    }
     commonCompileOnly(intellijCore())
     commonCompileOnly(commonDependency("org.jetbrains.teamcity:serviceMessages"))
     commonCompileOnly("com.gradle:gradle-enterprise-gradle-plugin:3.12.4")
     commonCompileOnly(commonDependency("com.google.code.gson:gson"))
-    commonCompileOnly(commonDependency("com.google.guava:guava"))
     commonCompileOnly("de.undercouch:gradle-download-task:4.1.1")
     commonCompileOnly("com.github.gundy:semver4j:0.16.4:nodeps") {
         exclude(group = "*")
@@ -73,11 +104,9 @@ dependencies {
     commonImplementation(project(":kotlin-gradle-plugin-idea-proto"))
     commonImplementation(project(":kotlin-util-klib"))
     commonImplementation(project(":native:kotlin-klib-commonizer-api"))
-    commonImplementation(project(":kotlin-project-model"))
     commonImplementation(project(":compiler:build-tools:kotlin-build-tools-api"))
 
     commonRuntimeOnly(project(":kotlin-compiler-embeddable"))
-    commonRuntimeOnly(project(":kotlin-annotation-processing-embeddable"))
     commonRuntimeOnly(project(":kotlin-android-extensions"))
     commonRuntimeOnly(project(":kotlin-compiler-runner")) {
         // Excluding dependency with not-relocated 'com.intellij' types
@@ -248,6 +277,15 @@ if (!kotlinBuildProperties.isInJpsBuildIdeaSync) {
     }
 
     val functionalTestCompilation = kotlin.target.compilations.getByName("functionalTest")
+    functionalTestCompilation.compileJavaTaskProvider.configure {
+        sourceCompatibility = JavaLanguageVersion.of(11).toString()
+        targetCompatibility = JavaLanguageVersion.of(11).toString()
+    }
+    functionalTestCompilation.compileTaskProvider.configure {
+        with(this as KotlinCompile) {
+            kotlinJavaToolchain.toolchain.use(project.getToolchainLauncherFor(JdkMajorVersion.JDK_11_0))
+        }
+    }
     functionalTestCompilation.associateWith(kotlin.target.compilations.getByName("main"))
     functionalTestCompilation.associateWith(kotlin.target.compilations.getByName("common"))
 
@@ -279,6 +317,7 @@ if (!kotlinBuildProperties.isInJpsBuildIdeaSync) {
         dependsOnKotlinGradlePluginInstall()
         useAndroidSdk()
         doFirst { acceptAndroidSdkLicenses() }
+        maxParallelForks = 8
 
         testLogging {
             events("passed", "skipped", "failed")
@@ -289,8 +328,8 @@ if (!kotlinBuildProperties.isInJpsBuildIdeaSync) {
         val implementation = project.configurations.getByName(functionalTestSourceSet.implementationConfigurationName)
         val compileOnly = project.configurations.getByName(functionalTestSourceSet.compileOnlyConfigurationName)
 
-        implementation("com.android.tools.build:gradle:7.2.1")
-        implementation("com.android.tools.build:gradle-api:7.2.1")
+        implementation("com.android.tools.build:gradle:7.4.2")
+        implementation("com.android.tools.build:gradle-api:7.4.2")
         compileOnly("com.android.tools:common:30.2.1")
         implementation(gradleKotlinDsl())
         implementation(project(":kotlin-gradle-plugin-kpm-android"))
@@ -298,7 +337,7 @@ if (!kotlinBuildProperties.isInJpsBuildIdeaSync) {
         implementation(project(":kotlin-tooling-metadata"))
         implementation(project.dependencies.testFixtures(project(":kotlin-gradle-plugin-idea")))
         implementation("com.github.gundy:semver4j:0.16.4:nodeps") {
-            (this as ExternalModuleDependency).exclude(group = "*")
+            exclude(group = "*")
         }
         implementation("org.reflections:reflections:0.10.2")
     }

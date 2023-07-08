@@ -10,6 +10,9 @@ class C {
     // CHECK JVM_IR:
     //   Mangled name: C#<get-c>(){}kotlin.Int
     //   Public signature: /C.c.<get-c>|-2440337234483931882[0]
+    // CHECK JS_IR NATIVE:
+    //   Mangled name: C#<get-c>(){}
+    //   Public signature: /C.c.<get-c>|2368736057102379596[0]
     get
 
   // CHECK:
@@ -28,8 +31,7 @@ fun bar(c: C): Unit
   local fun C.<anonymous>(): Unit
 
 // CHECK:
-//   Mangled name computed from Ir:         #foo(C){}
-//   Mangled name computed from Descriptor: #foo!C(){}
+//   Mangled name: #foo!C(){}
 //   Public signature: /foo|-1491377105373055541[0]
 fun foo($context_receiver_0: C): Unit
 

@@ -77,8 +77,8 @@ fun copyK2JVMCompilerArguments(from: K2JVMCompilerArguments, to: K2JVMCompilerAr
     to.suppressMissingBuiltinsError = from.suppressMissingBuiltinsError
     to.typeEnhancementImprovementsInStrictMode = from.typeEnhancementImprovementsInStrictMode
     to.useFastJarFileSystem = from.useFastJarFileSystem
-    to.useIR = from.useIR
     to.useJavac = from.useJavac
+    to.useKapt4 = from.useKapt4
     to.useOldBackend = from.useOldBackend
     to.useOldClassFilesReading = from.useOldClassFilesReading
     to.useOldInlineClassesManglingScheme = from.useOldInlineClassesManglingScheme

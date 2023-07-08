@@ -19,6 +19,7 @@ import org.jetbrains.kotlin.fir.contracts.FirLegacyRawContractDescription
 import org.jetbrains.kotlin.fir.contracts.builder.buildLegacyRawContractDescription
 import org.jetbrains.kotlin.fir.declarations.FirCallableDeclaration
 import org.jetbrains.kotlin.fir.declarations.FirDeclarationOrigin
+import org.jetbrains.kotlin.fir.declarations.FirFunction
 import org.jetbrains.kotlin.fir.declarations.FirReceiverParameter
 import org.jetbrains.kotlin.fir.declarations.FirVariable
 import org.jetbrains.kotlin.fir.declarations.builder.*
@@ -44,11 +45,13 @@ import org.jetbrains.kotlin.fir.types.ConeStarProjection
 import org.jetbrains.kotlin.fir.types.FirImplicitTypeRef
 import org.jetbrains.kotlin.fir.types.FirTypeRef
 import org.jetbrains.kotlin.fir.types.builder.buildResolvedTypeRef
+import org.jetbrains.kotlin.fir.types.builder.buildTypeProjectionWithVariance
 import org.jetbrains.kotlin.fir.types.impl.*
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.name.SpecialNames
 import org.jetbrains.kotlin.types.ConstantValueKind
+import org.jetbrains.kotlin.types.Variance
 import org.jetbrains.kotlin.types.expressions.OperatorConventions
 import org.jetbrains.kotlin.util.OperatorNameConventions
 import kotlin.contracts.ExperimentalContracts
@@ -311,6 +314,7 @@ fun <T> FirPropertyBuilder.generateAccessorsByDelegate(
     ownerRegularOrAnonymousObjectSymbol: FirClassSymbol<*>?,
     context: Context<T>,
     isExtension: Boolean,
+    lazyDelegateExpression: FirLazyExpression? = null,
 ) {
     if (delegateBuilder == null) return
     val delegateFieldSymbol = FirDelegateFieldSymbol(symbol.callableId).also {
@@ -389,25 +393,39 @@ fun <T> FirPropertyBuilder.generateAccessorsByDelegate(
                 FirImplicitKProperty1TypeRef(null, ConeStarProjection, ConeStarProjection)
             }
         }
+        this@generateAccessorsByDelegate.typeParameters.mapTo(typeArguments) {
+            buildTypeProjectionWithVariance {
+                source = fakeSource
+                variance = Variance.INVARIANT
+                typeRef = buildResolvedTypeRef {
+                    type = ConeTypeParameterTypeImpl(it.symbol.toLookupTag(), false)
+                }
+            }
+        }
     }
 
-    delegateBuilder.delegateProvider = buildFunctionCall {
-        explicitReceiver = delegateBuilder.expression
-        calleeReference = buildSimpleNamedReference {
+    delegate = lazyDelegateExpression ?: run {
+        delegateBuilder.delegateProvider = buildFunctionCall {
+            explicitReceiver = delegateBuilder.expression
+            calleeReference = buildSimpleNamedReference {
+                source = fakeSource
+                name = OperatorNameConventions.PROVIDE_DELEGATE
+            }
+            argumentList = buildBinaryArgumentList(thisRef(forDispatchReceiver = true), propertyRef())
+            origin = FirFunctionCallOrigin.Operator
             source = fakeSource
-            name = OperatorNameConventions.PROVIDE_DELEGATE
         }
-        argumentList = buildBinaryArgumentList(thisRef(forDispatchReceiver = true), propertyRef())
-        origin = FirFunctionCallOrigin.Operator
-        source = fakeSource
+
+        delegateBuilder.build()
     }
-    delegate = delegateBuilder.build()
+
     if (getter == null || getter is FirDefaultPropertyAccessor) {
         val annotations = getter?.annotations
         val returnTarget = FirFunctionTarget(null, isLambda = false)
         val getterStatus = getter?.status
+        val getterElement = getter?.source?.fakeElement(KtFakeSourceElementKind.DelegatedPropertyAccessor) ?: fakeSource
         getter = buildPropertyAccessor {
-            this.source = fakeSource
+            this.source = getterElement
             this.moduleData = moduleData
             origin = FirDeclarationOrigin.Source
             returnTypeRef = FirImplicitTypeRefImplWithoutSource
@@ -445,8 +463,9 @@ fun <T> FirPropertyBuilder.generateAccessorsByDelegate(
         val annotations = setter?.annotations
         val parameterAnnotations = setter?.valueParameters?.firstOrNull()?.annotations
         val setterStatus = setter?.status
+        val setterElement = setter?.source?.fakeElement(KtFakeSourceElementKind.DelegatedPropertyAccessor) ?: fakeSource
         setter = buildPropertyAccessor {
-            this.source = fakeSource
+            this.source = setterElement
             this.moduleData = moduleData
             origin = FirDeclarationOrigin.Source
             returnTypeRef = moduleData.session.builtinTypes.unitType
@@ -648,3 +667,8 @@ fun buildBalancedOrExpressionTree(conditions: List<FirExpression>, lower: Int = 
         (leftNode.source ?: rightNode.source)?.fakeElement(KtFakeSourceElementKind.WhenCondition)
     )
 }
+
+fun AnnotationUseSiteTarget?.appliesToPrimaryConstructorParameter() = this == null ||
+        this == AnnotationUseSiteTarget.CONSTRUCTOR_PARAMETER ||
+        this == AnnotationUseSiteTarget.RECEIVER ||
+        this == AnnotationUseSiteTarget.FILE

@@ -3,7 +3,7 @@
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
-@file:Suppress("DuplicatedCode")
+@file:Suppress("DuplicatedCode", "unused")
 
 package org.jetbrains.kotlin.fir.references.impl
 
@@ -23,6 +23,7 @@ internal class FirExplicitThisReference(
     override var contextReceiverNumber: Int,
 ) : FirThisReference() {
     override var boundSymbol: FirBasedSymbol<*>? = null
+    override val isImplicit: Boolean = false
 
     override fun <R, D> acceptChildren(visitor: FirVisitor<R, D>, data: D) {}
 

@@ -5,6 +5,7 @@
 
 package org.jetbrains.kotlin.ir.descriptors
 
+import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.descriptors.annotations.AnnotationDescriptor
 import org.jetbrains.kotlin.descriptors.annotations.AnnotationDescriptorImpl
@@ -103,6 +104,9 @@ abstract class IrBasedDeclarationDescriptor<T : IrDeclaration>(val owner: T) : D
             else -> error("$this is not expected: ${this.dump()}")
         }
     }
+
+    @OptIn(ObsoleteDescriptorBasedAPI::class)
+    protected fun IrType.toIrBasedKotlinType(): KotlinType = toIrBasedKotlinType(owner.module.builtIns)
 
     override fun getContainingDeclaration(): DeclarationDescriptor =
         getContainingDeclaration(owner)
@@ -396,10 +400,27 @@ open class IrBasedVariableDescriptorWithAccessor(owner: IrLocalDelegatedProperty
 
 fun IrLocalDelegatedProperty.toIrBasedDescriptor() = IrBasedVariableDescriptorWithAccessor(this)
 
+abstract class IrBasedFunctionDescriptor<Function : IrFunction>(owner: Function) : IrBasedCallableDescriptor<Function>(owner) {
+
+    override fun getExtensionReceiverParameter() = owner.extensionReceiverParameter?.toIrBasedDescriptor() as? ReceiverParameterDescriptor
+
+    override fun getContextReceiverParameters() = owner.valueParameters
+        .asSequence()
+        .take(owner.contextReceiverParametersCount)
+        .map(::IrBasedReceiverParameterDescriptor)
+        .toMutableList()
+
+    override fun getValueParameters() = owner.valueParameters
+        .asSequence()
+        .drop(owner.contextReceiverParametersCount)
+        .map(::IrBasedValueParameterDescriptor)
+        .toMutableList()
+}
+
 // We make all IR-based function descriptors instances of DescriptorWithContainerSource, and use .parentClassId to
 // check whether declaration is deserialized. See IrInlineCodegen.descriptorIsDeserialized
 open class IrBasedSimpleFunctionDescriptor(owner: IrSimpleFunction) : SimpleFunctionDescriptor, DescriptorWithContainerSource,
-    IrBasedCallableDescriptor<IrSimpleFunction>(owner) {
+    IrBasedFunctionDescriptor<IrSimpleFunction>(owner) {
 
     override fun getOverriddenDescriptors(): List<FunctionDescriptor> = owner.overriddenSymbols.memoryOptimizedMap { it.owner.toIrBasedDescriptor() }
 
@@ -412,12 +433,7 @@ open class IrBasedSimpleFunctionDescriptor(owner: IrSimpleFunction) : SimpleFunc
         (containingDeclaration as ClassDescriptor).thisAsReceiverParameter
     }
 
-    override fun getExtensionReceiverParameter() = owner.extensionReceiverParameter?.toIrBasedDescriptor() as? ReceiverParameterDescriptor
     override fun getTypeParameters() = owner.typeParameters.memoryOptimizedMap { it.toIrBasedDescriptor() }
-    override fun getValueParameters() = owner.valueParameters
-        .asSequence()
-        .mapNotNull { it.toIrBasedDescriptor() as? ValueParameterDescriptor }
-        .toMutableList()
 
     override fun isExternal() = owner.isExternal
     override fun isSuspend() = owner.isSuspend
@@ -482,7 +498,7 @@ fun IrSimpleFunction.toIrBasedDescriptor() =
     }
 
 open class IrBasedClassConstructorDescriptor(owner: IrConstructor) : ClassConstructorDescriptor,
-    IrBasedCallableDescriptor<IrConstructor>(owner) {
+    IrBasedFunctionDescriptor<IrConstructor>(owner) {
     override fun getContainingDeclaration() = (owner.parent as IrClass).toIrBasedDescriptor()
 
     override fun getDispatchReceiverParameter() = owner.dispatchReceiverParameter?.run {
@@ -491,10 +507,6 @@ open class IrBasedClassConstructorDescriptor(owner: IrConstructor) : ClassConstr
 
     override fun getTypeParameters() =
         (owner.constructedClass.typeParameters + owner.typeParameters).memoryOptimizedMap { it.toIrBasedDescriptor() }
-
-    override fun getValueParameters() = owner.valueParameters.asSequence()
-        .mapNotNull { it.toIrBasedDescriptor() as? ValueParameterDescriptor }
-        .toMutableList()
 
     override fun getOriginal() = this
 
@@ -1114,7 +1126,20 @@ open class IrBasedFieldDescriptor(owner: IrField) : PropertyDescriptor, IrBasedD
     override fun <V : Any?> getUserData(key: CallableDescriptor.UserDataKey<V>?): V? = null
 }
 
-fun IrField.toIrBasedDescriptor() = IrBasedFieldDescriptor(this)
+class IrBasedDelegateFieldDescriptor(owner: IrField) : IrBasedFieldDescriptor(owner), IrImplementingDelegateDescriptor {
+
+    override val correspondingSuperType: KotlinType
+        get() = TODO("not implemented")
+
+    override val isDelegated: Boolean
+        get() = true
+}
+
+fun IrField.toIrBasedDescriptor() = if (origin == IrDeclarationOrigin.DELEGATE) {
+    IrBasedDelegateFieldDescriptor(this)
+} else {
+    IrBasedFieldDescriptor(this)
+}
 
 class IrBasedErrorDescriptor(owner: IrErrorDeclaration) : IrBasedDeclarationDescriptor<IrErrorDeclaration>(owner) {
     override fun getName(): Name = error("IrBasedErrorDescriptor.getName: Should not be reached")
@@ -1138,6 +1163,9 @@ fun IrErrorDeclaration.toIrBasedDescriptor() = IrBasedErrorDescriptor(this)
 @OptIn(ObsoleteDescriptorBasedAPI::class)
 private fun getContainingDeclaration(declaration: IrDeclaration): DeclarationDescriptor {
     val parent = declaration.parent
+    if (declaration is IrTypeParameter && parent is IrSimpleFunction) {
+        parent.correspondingPropertySymbol?.owner?.let { return it.toIrBasedDescriptor() }
+    }
     val parentDescriptor = (parent as IrSymbolOwner).let {
         if (it is IrDeclaration) it.toIrBasedDescriptor() else it.symbol.descriptor
     }
@@ -1150,9 +1178,9 @@ private fun getContainingDeclaration(declaration: IrDeclaration): DeclarationDes
     }
 }
 
-fun IrType.toIrBasedKotlinType(): KotlinType = when (this) {
+fun IrType.toIrBasedKotlinType(builtins: KotlinBuiltIns? = null): KotlinType = when (this) {
     is IrSimpleType ->
-        makeKotlinType(classifier, arguments, isMarkedNullable()).let {
+        makeKotlinType(classifier, arguments, isMarkedNullable(), builtins).let {
             if (classifier is IrTypeParameterSymbol && nullability == SimpleTypeNullability.DEFINITELY_NOT_NULL) {
                 // avoidCheckingActualTypeNullability = true is necessary because in recursive cases `makesSenseToBeDefinitelyNotNull` triggers
                 // supertype computation for a type parameter and for which bounds we need to call `toIrBasedKotlinType` again
@@ -1161,6 +1189,7 @@ fun IrType.toIrBasedKotlinType(): KotlinType = when (this) {
                 it
             }
         }
+    is IrDynamicType -> kotlinType ?: builtins?.let(::createDynamicType) ?: error("Couldn't instantiate DynamicType")
     is IrErrorType -> kotlinType ?: error("Can't find KotlinType in IrErrorType: " + (this as IrType).render())
     else ->
         throw AssertionError("Unexpected type: $this = ${this.render()}")
@@ -1169,7 +1198,8 @@ fun IrType.toIrBasedKotlinType(): KotlinType = when (this) {
 private fun makeKotlinType(
     classifier: IrClassifierSymbol,
     arguments: List<IrTypeArgument>,
-    hasQuestionMark: Boolean
+    hasQuestionMark: Boolean,
+    builtins: KotlinBuiltIns?,
 ): SimpleType =
     when (classifier) {
         is IrTypeParameterSymbol ->
@@ -1178,7 +1208,7 @@ private fun makeKotlinType(
             val classDescriptor = classifier.toIrBasedDescriptorIfPossible()
             val kotlinTypeArguments = arguments.memoryOptimizedMapIndexed { index, it ->
                 when (it) {
-                    is IrTypeProjection -> TypeProjectionImpl(it.variance, it.type.toIrBasedKotlinType())
+                    is IrTypeProjection -> TypeProjectionImpl(it.variance, it.type.toIrBasedKotlinType(builtins))
                     is IrStarProjection -> StarProjectionImpl(classDescriptor.typeConstructor.parameters[index])
                 }
             }

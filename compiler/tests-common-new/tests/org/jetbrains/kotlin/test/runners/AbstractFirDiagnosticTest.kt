@@ -11,12 +11,13 @@ import org.jetbrains.kotlin.fir.FirSession
 import org.jetbrains.kotlin.fir.symbols.FirLazyDeclarationResolver
 import org.jetbrains.kotlin.platform.jvm.JvmPlatforms
 import org.jetbrains.kotlin.test.*
-import org.jetbrains.kotlin.test.backend.ir.ActualizerOnlyFacade
+import org.jetbrains.kotlin.test.backend.ir.IrActualizerAndPluginsFacade
 import org.jetbrains.kotlin.test.backend.ir.IrDiagnosticsHandler
 import org.jetbrains.kotlin.test.builders.TestConfigurationBuilder
 import org.jetbrains.kotlin.test.builders.configureFirHandlersStep
 import org.jetbrains.kotlin.test.builders.firHandlersStep
 import org.jetbrains.kotlin.test.builders.irHandlersStep
+import org.jetbrains.kotlin.test.directives.CodegenTestDirectives
 import org.jetbrains.kotlin.test.directives.ConfigurationDirectives.WITH_STDLIB
 import org.jetbrains.kotlin.test.directives.FirDiagnosticsDirectives.FIR_DUMP
 import org.jetbrains.kotlin.test.directives.FirDiagnosticsDirectives.WITH_EXTENDED_CHECKERS
@@ -31,23 +32,41 @@ import org.jetbrains.kotlin.test.frontend.fir.handlers.*
 import org.jetbrains.kotlin.test.model.DependencyKind
 import org.jetbrains.kotlin.test.model.FrontendFacade
 import org.jetbrains.kotlin.test.model.FrontendKinds
+import org.jetbrains.kotlin.test.services.LibraryProvider
+import org.jetbrains.kotlin.test.services.TestService
+import org.jetbrains.kotlin.test.services.TestServices
 import org.jetbrains.kotlin.test.services.configuration.CommonEnvironmentConfigurator
 import org.jetbrains.kotlin.test.services.configuration.JvmEnvironmentConfigurator
 import org.jetbrains.kotlin.test.services.fir.FirOldFrontendMetaConfigurator
 import org.jetbrains.kotlin.test.services.service
 import org.jetbrains.kotlin.test.services.sourceProviders.AdditionalDiagnosticsSourceFilesProvider
 import org.jetbrains.kotlin.test.services.sourceProviders.CoroutineHelpersSourceFilesProvider
-import org.jetbrains.kotlin.test.FirParser
-import org.jetbrains.kotlin.test.directives.CodegenTestDirectives
-import org.jetbrains.kotlin.test.services.JsLibraryProvider
-import org.jetbrains.kotlin.test.services.TestService
-import org.jetbrains.kotlin.test.services.TestServices
 
 abstract class AbstractFirDiagnosticTestBase(val parser: FirParser) : AbstractKotlinCompilerTest() {
     override fun TestConfigurationBuilder.configuration() {
         baseFirDiagnosticTestConfiguration()
         enableLazyResolvePhaseChecking()
         configureFirParser(parser)
+    }
+}
+
+@Jdk21Test
+abstract class AbstractFirPsiJdk21DiagnosticTest : AbstractFirDiagnosticTestBase(FirParser.Psi) {
+    override fun configure(builder: TestConfigurationBuilder) {
+        super.configure(builder)
+        builder.defaultDirectives {
+            JDK_KIND with TestJdkKind.FULL_JDK_21
+        }
+    }
+}
+
+@Jdk21Test
+abstract class AbstractFirLightTreeJdk21DiagnosticTest : AbstractFirDiagnosticTestBase(FirParser.LightTree) {
+    override fun configure(builder: TestConfigurationBuilder) {
+        super.configure(builder)
+        builder.defaultDirectives {
+            JDK_KIND with TestJdkKind.FULL_JDK_21
+        }
     }
 }
 
@@ -80,14 +99,14 @@ abstract class AbstractFirWithActualizerDiagnosticsTest(val parser: FirParser) :
         baseFirDiagnosticTestConfiguration()
 
         facadeStep(::Fir2IrResultsConverter)
-        facadeStep(::ActualizerOnlyFacade)
+        facadeStep(::IrActualizerAndPluginsFacade)
         irHandlersStep {
             useHandlers(
                 ::IrDiagnosticsHandler
             )
         }
 
-        useAdditionalService(::JsLibraryProvider)
+        useAdditionalService(::LibraryProvider)
     }
 }
 
@@ -220,9 +239,10 @@ fun TestConfigurationBuilder.enableLazyResolvePhaseChecking() {
         service<FirSessionComponentRegistrar>(::FirLazyDeclarationResolverWithPhaseCheckingSessionComponentRegistrar.coerce())
     )
 
-    useAfterAnalysisCheckers(
-        ::DisableLazyResolveChecksAfterAnalysisChecker,
-    )
+    // It's important to filter out failures from lazy resolve before calling other suppressors like BlackBoxCodegenSuppressor
+    // Otherwise other suppressors can filter out every failure from test and keep it as ignored even if
+    // the only problem in lazy resolve contracts, which disables with special directive
+    useAfterAnalysisCheckers(::DisableLazyResolveChecksAfterAnalysisChecker, insertAtFirst = true)
 
     configureFirHandlersStep {
         useHandlers(

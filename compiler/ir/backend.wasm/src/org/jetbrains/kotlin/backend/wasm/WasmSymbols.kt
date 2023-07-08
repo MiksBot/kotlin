@@ -83,7 +83,7 @@ class WasmSymbols(
     override val throwNullPointerException = getInternalFunction("THROW_NPE")
     override val throwISE = getInternalFunction("THROW_ISE")
     override val throwTypeCastException = getInternalFunction("THROW_CCE")
-    val throwIAE = getInternalFunction("THROW_IAE")
+    override val throwIAE = getInternalFunction("THROW_IAE")
     val throwNoBranchMatchedException =
         getInternalFunction("throwNoBranchMatchedException")
     override val throwUninitializedPropertyAccessException =
@@ -193,6 +193,18 @@ class WasmSymbols(
     val refCastNull = getInternalFunction("wasm_ref_cast_null")
     val wasmArrayCopy = getInternalFunction("wasm_array_copy")
     val wasmArrayNewData0 = getInternalFunction("array_new_data0")
+
+    val primitiveTypeToCreateTypedArray = mapOf(
+        context.irBuiltIns.arrayClass to getFunction("createAnyArray", kotlinTopLevelPackage),
+        context.irBuiltIns.booleanArray to getFunction("createBooleanArray", kotlinTopLevelPackage),
+        context.irBuiltIns.byteArray to getFunction("createByteArray", kotlinTopLevelPackage),
+        context.irBuiltIns.shortArray to getFunction("createShortArray", kotlinTopLevelPackage),
+        context.irBuiltIns.charArray to getFunction("createCharArray", kotlinTopLevelPackage),
+        context.irBuiltIns.intArray to getFunction("createIntArray", kotlinTopLevelPackage),
+        context.irBuiltIns.longArray to getFunction("createLongArray", kotlinTopLevelPackage),
+        context.irBuiltIns.floatArray to getFunction("createFloatArray", kotlinTopLevelPackage),
+        context.irBuiltIns.doubleArray to getFunction("createDoubleArray", kotlinTopLevelPackage),
+    )
 
     val intToLong = getInternalFunction("wasm_i64_extend_i32_s")
 

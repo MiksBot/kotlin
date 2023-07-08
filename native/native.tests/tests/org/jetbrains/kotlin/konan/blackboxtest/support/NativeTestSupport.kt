@@ -150,13 +150,9 @@ private object NativeTestSupport {
         val enforcedProperties = EnforcedProperties(enclosingTestClass)
 
         val optimizationMode = computeOptimizationMode(enforcedProperties)
-        val memoryModel = computeMemoryModel(enforcedProperties)
 
         val threadStateChecker = computeThreadStateChecker(enforcedProperties)
         if (threadStateChecker == ThreadStateChecker.ENABLED) {
-            assertEquals(MemoryModel.EXPERIMENTAL, memoryModel) {
-                "Thread state checker can be enabled only with experimental memory model"
-            }
             assertEquals(OptimizationMode.DEBUG, optimizationMode) {
                 "Thread state checker can be enabled only with debug optimization mode"
             }
@@ -164,18 +160,10 @@ private object NativeTestSupport {
         val sanitizer = computeSanitizer(enforcedProperties)
 
         val gcType = computeGCType(enforcedProperties)
-        if (gcType != GCType.UNSPECIFIED) {
-            assertEquals(MemoryModel.EXPERIMENTAL, memoryModel) {
-                "GC type can be specified only with experimental memory model"
-            }
-        }
 
         val gcScheduler = computeGCScheduler(enforcedProperties)
-        if (gcScheduler != GCScheduler.UNSPECIFIED) {
-            assertEquals(MemoryModel.EXPERIMENTAL, memoryModel) {
-                "GC scheduler can be specified only with experimental memory model"
-            }
-        }
+
+        val allocator = computeAllocator(enforcedProperties)
 
         val nativeHome = getOrCreateTestProcessSettings().get<KotlinNativeHome>()
 
@@ -194,10 +182,10 @@ private object NativeTestSupport {
         }
 
         output += optimizationMode
-        output += memoryModel
         output += threadStateChecker
         output += gcType
         output += gcScheduler
+        output += allocator
         output += nativeTargets
         output += sanitizer
         output += CacheMode::class to cacheMode
@@ -221,9 +209,6 @@ private object NativeTestSupport {
             default = OptimizationMode.DEBUG
         )
 
-    private fun computeMemoryModel(enforcedProperties: EnforcedProperties): MemoryModel =
-        ClassLevelProperty.MEMORY_MODEL.readValue(enforcedProperties, MemoryModel.values(), default = MemoryModel.EXPERIMENTAL)
-
     private fun computeThreadStateChecker(enforcedProperties: EnforcedProperties): ThreadStateChecker {
         val useThreadStateChecker =
             ClassLevelProperty.USE_THREAD_STATE_CHECKER.readValue(enforcedProperties, String::toBooleanStrictOrNull, default = false)
@@ -245,6 +230,9 @@ private object NativeTestSupport {
 
     private fun computeGCScheduler(enforcedProperties: EnforcedProperties): GCScheduler =
         ClassLevelProperty.GC_SCHEDULER.readValue(enforcedProperties, GCScheduler.values(), default = GCScheduler.UNSPECIFIED)
+
+    private fun computeAllocator(enforcedProperties: EnforcedProperties): Allocator =
+        ClassLevelProperty.ALLOCATOR.readValue(enforcedProperties, Allocator.values(), default = Allocator.UNSPECIFIED)
 
     private fun computeNativeTargets(enforcedProperties: EnforcedProperties, hostManager: HostManager): KotlinNativeTargets {
         val hostTarget = HostManager.host

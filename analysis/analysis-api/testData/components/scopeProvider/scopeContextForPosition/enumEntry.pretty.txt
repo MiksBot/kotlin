@@ -11,10 +11,10 @@ scopes:
 
   LocalScope, index = 1, empty
 
-  SimpleTypeScope, index = 2
+  TypeScope, index = 2
     classifiers: 1
       companion object
-    callables: 9
+    callables: 11
       val x: kotlin.String
       fun foo()
       fun clone(): kotlin.Any
@@ -24,6 +24,8 @@ scopes:
       fun toString(): kotlin.String
       val name: kotlin.String
       val ordinal: kotlin.Int
+      fun getDeclaringClass(): java.lang.Class<E?>?
+      fun finalize()
 
   StaticMemberScope, index = 3
     classifiers: 0
@@ -38,7 +40,7 @@ scopes:
       companion object
     callables: 0
 
-  SimpleTypeScope, index = 5
+  TypeScope, index = 5
     classifiers: 0
     callables: 3
       fun equals(other: kotlin.Any?): kotlin.Boolean
@@ -62,4 +64,3 @@ scopes:
 
   DefaultStarImportingScope, index = 12
 
-  DefaultStarImportingScope, index = 13

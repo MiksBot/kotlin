@@ -3,7 +3,7 @@
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
-@file:Suppress("DuplicatedCode")
+@file:Suppress("DuplicatedCode", "unused")
 
 package org.jetbrains.kotlin.fir.expressions.impl
 
@@ -51,13 +51,5 @@ internal class FirWrappedDelegateExpressionImpl(
 
     override fun replaceAnnotations(newAnnotations: List<FirAnnotation>) {
         annotations = newAnnotations.toMutableOrEmpty()
-    }
-
-    override fun replaceExpression(newExpression: FirExpression) {
-        expression = newExpression
-    }
-
-    override fun replaceDelegateProvider(newDelegateProvider: FirExpression) {
-        delegateProvider = newDelegateProvider
     }
 }

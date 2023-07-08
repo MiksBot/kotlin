@@ -10,9 +10,9 @@ import org.jetbrains.kotlin.diagnostics.DiagnosticReporter
 import org.jetbrains.kotlin.diagnostics.reportOn
 import org.jetbrains.kotlin.fir.analysis.checkers.context.CheckerContext
 import org.jetbrains.kotlin.fir.analysis.checkers.expression.FirDeprecationChecker
-import org.jetbrains.kotlin.fir.declarations.fullyExpandedClass
 import org.jetbrains.kotlin.fir.analysis.checkers.unsubstitutedScope
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors
+import org.jetbrains.kotlin.fir.analysis.diagnostics.toInvisibleReferenceDiagnostic
 import org.jetbrains.kotlin.fir.analysis.getSourceForImportSegment
 import org.jetbrains.kotlin.fir.declarations.*
 import org.jetbrains.kotlin.fir.declarations.utils.isEnumClass
@@ -76,7 +76,7 @@ object FirImportsChecker : FirFileChecker() {
             fun reportInvisibleParentClasses(classSymbol: FirRegularClassSymbol, depth: Int) {
                 if (!classSymbol.fir.isVisible(context)) {
                     val source = import.getSourceForImportSegment(indexFromLast = depth)
-                    reporter.reportOn(source, FirErrors.INVISIBLE_REFERENCE, classSymbol, context)
+                    reporter.report(classSymbol.toInvisibleReferenceDiagnostic(source), context)
                 }
 
                 classSymbol.classId.outerClassId?.resolveToClass(context)?.let { reportInvisibleParentClasses(it, depth + 1) }
@@ -88,7 +88,7 @@ object FirImportsChecker : FirFileChecker() {
                 ImportStatus.OK -> return
                 is ImportStatus.Invisible -> {
                     val source = import.getSourceForImportSegment(0)
-                    reporter.reportOn(source, FirErrors.INVISIBLE_REFERENCE, status.symbol, context)
+                    reporter.report(status.symbol.toInvisibleReferenceDiagnostic(source), context)
                 }
                 else -> {
                     val classId = parentClassSymbol.classId.createNestedClassId(importedName)
@@ -103,25 +103,33 @@ object FirImportsChecker : FirFileChecker() {
             return
         }
 
-        val resolvedClassSymbol = ClassId.topLevel(importedFqName).resolveToClass(context)
+        var resolvedDeclaration: FirMemberDeclaration? = null
 
-        if (resolvedClassSymbol != null) {
-            if (!resolvedClassSymbol.fir.isVisible(context)) {
-                reporter.reportOn(import.getSourceForImportSegment(0), FirErrors.INVISIBLE_REFERENCE, resolvedClassSymbol, context)
+        ClassId.topLevel(importedFqName).resolveToClass(context)?.let {
+            resolvedDeclaration = it.fir
+
+            if (it.fir.isVisible(context)) {
+                return
             }
-
-            return
         }
 
         // Note: two checks below are both heavyweight, so we should do them lazily!
 
         val topLevelCallableSymbol = symbolProvider.getTopLevelCallableSymbols(importedFqName.parent(), importedName)
-        if (topLevelCallableSymbol.isNotEmpty()) {
-            if (topLevelCallableSymbol.none { it.fir.isVisible(context) }) {
-                val source = import.getSourceForImportSegment(0)
-                reporter.reportOn(source, FirErrors.INVISIBLE_REFERENCE, topLevelCallableSymbol.first(), context)
+
+        for (it in topLevelCallableSymbol) {
+            if (it.fir.isVisible(context)) {
+                return
             }
 
+            if (resolvedDeclaration == null) {
+                resolvedDeclaration = it.fir
+            }
+        }
+
+        resolvedDeclaration?.let {
+            val source = import.getSourceForImportSegment(0) ?: import.source
+            reporter.report(it.symbol.toInvisibleReferenceDiagnostic(source), context)
             return
         }
 

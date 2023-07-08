@@ -23,7 +23,8 @@ allprojects {
     tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinNativeCompile>().configureEach {
         compilerOptions.freeCompilerArgs.addAll(
                 "-XXLanguage:+ImplicitSignedToUnsignedIntegerConversion",
-                "-opt-in=kotlinx.cinterop.ExperimentalForeignApi"
+                "-opt-in=kotlinx.cinterop.ExperimentalForeignApi",
+                "-opt-in=kotlin.experimental.ExperimentalNativeApi"
         )
     }
 }
@@ -46,7 +47,6 @@ val buildSamplesWithPlatformLibs by tasks.creating {
     }
     dependsOn(":echoServer:assemble")
     dependsOn(":globalState:assemble")
-    dependsOn(":html5Canvas:assemble")
     dependsOn(":workers:assemble")
 
     if (isMacos || isLinux) {

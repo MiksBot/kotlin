@@ -17,11 +17,12 @@ import org.jetbrains.kotlin.fir.FirAnnotationContainer
 import org.jetbrains.kotlin.fir.FirElementWithResolveState
 import org.jetbrains.kotlin.fir.FirFileAnnotationsContainer
 import org.jetbrains.kotlin.fir.FirSession
+import org.jetbrains.kotlin.fir.PrivateForInline
 import org.jetbrains.kotlin.fir.declarations.*
 import org.jetbrains.kotlin.fir.resolve.ResolutionMode
 import org.jetbrains.kotlin.fir.resolve.ScopeSession
-import org.jetbrains.kotlin.fir.resolve.transformers.body.resolve.FirAbstractBodyResolveTransformerDispatcher
-import org.jetbrains.kotlin.fir.resolve.transformers.body.resolve.FirTowerDataContextCollector
+import org.jetbrains.kotlin.fir.resolve.transformers.body.resolve.BodyResolveContext
+import org.jetbrains.kotlin.fir.resolve.transformers.body.resolve.FirResolveContextCollector
 import org.jetbrains.kotlin.fir.resolve.transformers.plugin.FirAnnotationArgumentsResolveTransformer
 import org.jetbrains.kotlin.fir.types.FirResolvedTypeRef
 import org.jetbrains.kotlin.fir.visitors.transformSingle
@@ -32,9 +33,9 @@ internal object LLFirAnnotationArgumentsLazyResolver : LLFirLazyResolver(FirReso
         lockProvider: LLFirLockProvider,
         session: FirSession,
         scopeSession: ScopeSession,
-        towerDataContextCollector: FirTowerDataContextCollector?,
+        towerDataContextCollector: FirResolveContextCollector?,
     ) {
-        val resolver = LLFirAnnotationArgumentsTargetResolver(target, lockProvider, session, scopeSession)
+        val resolver = LLFirAnnotationArgumentsTargetResolver(target, lockProvider, session, scopeSession, towerDataContextCollector)
         resolver.resolveDesignation()
     }
 
@@ -69,6 +70,7 @@ private class LLFirAnnotationArgumentsTargetResolver(
     lockProvider: LLFirLockProvider,
     session: FirSession,
     scopeSession: ScopeSession,
+    firResolveContextCollector: FirResolveContextCollector?,
 ) : LLFirAbstractBodyTargetResolver(
     target,
     lockProvider,
@@ -79,25 +81,67 @@ private class LLFirAnnotationArgumentsTargetResolver(
         session,
         scopeSession,
         resolverPhase,
-        returnTypeCalculator = createReturnTypeCalculator(towerDataContextCollector = null)
+        returnTypeCalculator = createReturnTypeCalculator(firResolveContextCollector = firResolveContextCollector),
+        firResolveContextCollector = firResolveContextCollector,
     )
 
     override fun doLazyResolveUnderLock(target: FirElementWithResolveState) {
+        collectTowerDataContext(target)
+
         FirLazyBodiesCalculator.calculateAnnotations(target)
-        transformer.transformAnnotations(target)
+        transformAnnotations(target)
+    }
+
+    private fun collectTowerDataContext(target: FirElementWithResolveState) {
+        val contextCollector = transformer.firResolveContextCollector
+        if (contextCollector == null || target !is FirDeclaration) return
+
+        val bodyResolveContext = transformer.context
+        withTypeParametersIfMemberDeclaration(bodyResolveContext, target) {
+            when (target) {
+                is FirRegularClass -> {
+                    contextCollector.addClassHeaderContext(target, bodyResolveContext.towerDataContext)
+                }
+
+                is FirFunction -> bodyResolveContext.forFunctionBody(target, transformer.components) {
+                    contextCollector.addDeclarationContext(target, bodyResolveContext)
+                }
+
+                else -> contextCollector.addDeclarationContext(target, bodyResolveContext)
+            }
+        }
+
+        if (target is FirRegularClass) {
+            withRegularClass(target) {
+                contextCollector.addDeclarationContext(target, bodyResolveContext)
+            }
+        }
+    }
+
+    private inline fun withTypeParametersIfMemberDeclaration(
+        context: BodyResolveContext,
+        target: FirElementWithResolveState,
+        action: () -> Unit,
+    ) {
+        if (target is FirMemberDeclaration) {
+            @OptIn(PrivateForInline::class)
+            context.withTypeParametersOf(target, action)
+        } else {
+            action()
+        }
     }
 }
 
-internal fun FirAbstractBodyResolveTransformerDispatcher.transformAnnotations(target: FirElementWithResolveState) {
+internal fun LLFirAbstractBodyTargetResolver.transformAnnotations(target: FirElementWithResolveState) {
     when {
         target is FirRegularClass -> {
-            target.transformAnnotations(declarationsTransformer, ResolutionMode.ContextIndependent)
-            target.transformTypeParameters(declarationsTransformer, ResolutionMode.ContextIndependent)
-            target.transformSuperTypeRefs(declarationsTransformer, ResolutionMode.ContextIndependent)
+            target.transformAnnotations(transformer.declarationsTransformer, ResolutionMode.ContextIndependent)
+            target.transformTypeParameters(transformer.declarationsTransformer, ResolutionMode.ContextIndependent)
+            target.transformSuperTypeRefs(transformer.declarationsTransformer, ResolutionMode.ContextIndependent)
         }
 
         target.isRegularDeclarationWithAnnotation -> {
-            target.transformSingle(this, ResolutionMode.ContextIndependent)
+            target.transformSingle(transformer, ResolutionMode.ContextIndependent)
         }
 
         else -> throwUnexpectedFirElementError(target)

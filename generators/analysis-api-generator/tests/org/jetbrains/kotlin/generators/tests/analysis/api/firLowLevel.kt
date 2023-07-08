@@ -14,7 +14,10 @@ import org.jetbrains.kotlin.analysis.low.level.api.fir.diagnostic.compiler.based
 import org.jetbrains.kotlin.analysis.low.level.api.fir.diagnostic.compiler.based.AbstractLLFirPreresolvedReversedDiagnosticCompilerTestDataSpecTest
 import org.jetbrains.kotlin.analysis.low.level.api.fir.diagnostic.compiler.based.AbstractLLFirPreresolvedReversedDiagnosticCompilerTestDataTest
 import org.jetbrains.kotlin.analysis.low.level.api.fir.file.structure.AbstractOutOfContentRootFileStructureTest
+import org.jetbrains.kotlin.analysis.low.level.api.fir.file.structure.AbstractOutOfContentRootInBlockModificationTest
 import org.jetbrains.kotlin.analysis.low.level.api.fir.file.structure.AbstractSourceFileStructureTest
+import org.jetbrains.kotlin.analysis.low.level.api.fir.file.structure.AbstractSourceInBlockModificationTest
+import org.jetbrains.kotlin.analysis.low.level.api.fir.resolve.AbstractErrorResistanceTest
 import org.jetbrains.kotlin.analysis.low.level.api.fir.resolve.AbstractOutOfContentRootInnerDeclarationsResolvePhaseTest
 import org.jetbrains.kotlin.analysis.low.level.api.fir.resolve.AbstractSourceInnerDeclarationsResolvePhaseTest
 import org.jetbrains.kotlin.generators.TestGroup
@@ -44,8 +47,24 @@ internal fun TestGroupSuite.generateFirLowLevelApiTests() {
             model("lazyResolve")
         }
 
+        testClass<AbstractStdLibSourcesLazyDeclarationResolveTest> {
+            model("lazyResolveStdlibSources")
+        }
+
         testClass<AbstractFirOutOfContentRootLazyDeclarationResolveTest> {
             model("lazyResolve")
+        }
+
+        testClass<AbstractErrorResistanceTest> {
+            model("errorResistance")
+        }
+
+        testClass<AbstractSourceInBlockModificationTest> {
+            model("inBlockModification")
+        }
+
+        testClass<AbstractOutOfContentRootInBlockModificationTest> {
+            model("inBlockModification")
         }
 
         testClass<AbstractSourceFileStructureTest> {
@@ -92,12 +111,24 @@ internal fun TestGroupSuite.generateFirLowLevelApiTests() {
             model("getOrBuildFir")
         }
 
+        testClass<AbstractLibraryGetOrBuildFirTest> {
+            model("getOrBuildFirBinary")
+        }
+
+        testClass<AbstractStdLibBasedGetOrBuildFirTest> {
+            model("getOrBuildFirForStdLib")
+        }
+
         testClass<AbstractFileBasedKotlinDeclarationProviderTest> {
             model("fileBasedDeclarationProvider", pattern = TestGeneratorUtil.KT_OR_KTS)
         }
 
         testClass<AbstractFirNonLocalDeclarationAnchorTest> {
             model("nonLocalDeclarationAnchors")
+        }
+
+        testClass<AbstractClassIdTest> {
+            model("classId")
         }
     }
 

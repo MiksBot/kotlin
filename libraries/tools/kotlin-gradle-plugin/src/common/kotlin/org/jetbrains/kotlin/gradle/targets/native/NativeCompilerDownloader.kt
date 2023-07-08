@@ -48,7 +48,7 @@ class NativeCompilerDownloader(
     private val kotlinProperties get() = PropertiesProvider(project)
 
     private val distributionType: NativeDistributionType
-        get() = NativeDistributionTypeProvider(project).getDistributionType(compilerVersion)
+        get() = NativeDistributionTypeProvider(project).getDistributionType()
 
     private val simpleOsName: String
         get() = HostManager.platformName()
@@ -103,9 +103,12 @@ class NativeCompilerDownloader(
     }
 
     private val repoUrl by lazy {
+        val versionPattern = "(\\d+)\\.(\\d+)(?:\\.(\\d+))?(?:-(\\p{Alpha}*\\p{Alnum}|[\\p{Alpha}-]*))?(?:-(\\d+))?".toRegex()
+        val (_, _, _, buildType, _) = versionPattern.matchEntire(compilerVersion)?.destructured
+            ?: error("Unable to parse version $compilerVersion")
         buildString {
             append("${kotlinProperties.nativeBaseDownloadUrl}/")
-            append(if (compilerVersion.contains("-dev-")) "dev/" else "releases/")
+            append(if (buildType in listOf("RC", "RC2", "Beta") || buildType.isEmpty()) "releases/" else "dev/")
             append("$compilerVersion/")
             append(simpleOsName)
         }
@@ -204,7 +207,7 @@ internal fun Project.setupNativeCompiler(konanTarget: KonanTarget) {
         logger.info("User-provided Kotlin/Native distribution: $konanHome")
     }
 
-    val distributionType = NativeDistributionTypeProvider(project).getDistributionType(konanVersion)
+    val distributionType = NativeDistributionTypeProvider(project).getDistributionType()
     if (distributionType.mustGeneratePlatformLibs) {
         PlatformLibrariesGenerator(project, konanTarget).generatePlatformLibsIfNeeded()
     }

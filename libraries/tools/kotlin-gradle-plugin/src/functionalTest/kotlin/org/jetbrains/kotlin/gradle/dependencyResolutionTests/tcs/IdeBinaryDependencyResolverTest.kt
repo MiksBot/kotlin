@@ -34,7 +34,7 @@ class IdeBinaryDependencyResolverTest {
         }
 
         val kotlin = project.multiplatformExtension
-        kotlin.targetHierarchy.default()
+        kotlin.applyDefaultHierarchyTemplate()
 
         kotlin.jvm()
         kotlin.linuxX64()
@@ -84,7 +84,7 @@ class IdeBinaryDependencyResolverTest {
 
     @Test
     fun `test - android artifact transformation`() {
-        assumeAndroidSdkAvailable()
+        assertAndroidSdkAvailable()
 
         /* Setup simple project that can resolve MVIKotlin */
         val project = buildProject {
@@ -98,7 +98,7 @@ class IdeBinaryDependencyResolverTest {
 
         /* Setup android target and add MVIKotlin dependency */
         val kotlin = project.multiplatformExtension
-        kotlin.targetHierarchy.default()
+        kotlin.applyDefaultHierarchyTemplate()
         kotlin.androidTarget()
         val commonMain = kotlin.sourceSets.getByName("commonMain")
         commonMain.dependencies {

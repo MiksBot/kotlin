@@ -10,32 +10,14 @@
 #include "std_support/Memory.hpp"
 #include "GlobalData.hpp"
 #include "GCStatistics.hpp"
+#include "ObjectOps.hpp"
 
 using namespace kotlin;
 
-namespace {
-
-ALWAYS_INLINE void SafePointRegular(gc::GC::ThreadData& threadData, size_t weight) noexcept {
-    threadData.impl().gcScheduler().OnSafePointRegular(weight);
-    auto flag = gc::internal::loadSafepointFlag();
-    if (flag != gc::SameThreadMarkAndSweep::SafepointFlag::kNone) {
-        threadData.impl().gc().SafePointSlowPath(flag);
-    }
-}
-
-} // namespace
-
-gc::GC::ThreadData::ThreadData(GC& gc, mm::ThreadData& threadData) noexcept : impl_(std_support::make_unique<Impl>(gc, threadData)) {}
+gc::GC::ThreadData::ThreadData(GC& gc, gcScheduler::GCSchedulerThreadData& gcScheduler, mm::ThreadData& threadData) noexcept :
+    impl_(std_support::make_unique<Impl>(gc, gcScheduler, threadData)) {}
 
 gc::GC::ThreadData::~ThreadData() = default;
-
-ALWAYS_INLINE void gc::GC::ThreadData::SafePointFunctionPrologue() noexcept {
-    SafePointRegular(*this, GCSchedulerThreadData::kFunctionPrologueWeight);
-}
-
-ALWAYS_INLINE void gc::GC::ThreadData::SafePointLoopBody() noexcept {
-    SafePointRegular(*this, GCSchedulerThreadData::kLoopBodyWeight);
-}
 
 void gc::GC::ThreadData::Schedule() noexcept {
     impl_->gc().Schedule();
@@ -65,13 +47,11 @@ ALWAYS_INLINE ArrayHeader* gc::GC::ThreadData::CreateArray(const TypeInfo* typeI
     return impl_->objectFactoryThreadQueue().CreateArray(typeInfo, elements);
 }
 
-void gc::GC::ThreadData::OnStoppedForGC() noexcept {
-    impl_->gcScheduler().OnStoppedForGC();
-}
-
 void gc::GC::ThreadData::OnSuspendForGC() noexcept { }
 
-gc::GC::GC() noexcept : impl_(std_support::make_unique<Impl>()) {}
+void gc::GC::ThreadData::safePoint() noexcept {}
+
+gc::GC::GC(gcScheduler::GCScheduler& gcScheduler) noexcept : impl_(std_support::make_unique<Impl>(gcScheduler)) {}
 
 gc::GC::~GC() = default;
 
@@ -84,21 +64,22 @@ size_t gc::GC::GetTotalHeapObjectsSizeBytes() const noexcept {
     return allocatedBytes();
 }
 
-gc::GCSchedulerConfig& gc::GC::gcSchedulerConfig() noexcept {
-    return impl_->gcScheduler().config();
-}
-
 void gc::GC::ClearForTests() noexcept {
+    impl_->gc().StopFinalizerThreadIfRunning();
     impl_->objectFactory().ClearForTests();
     GCHandle::ClearForTests();
 }
 
-void gc::GC::StartFinalizerThreadIfNeeded() noexcept {}
+void gc::GC::StartFinalizerThreadIfNeeded() noexcept {
+    impl_->gc().StartFinalizerThreadIfNeeded();
+}
 
-void gc::GC::StopFinalizerThreadIfRunning() noexcept {}
+void gc::GC::StopFinalizerThreadIfRunning() noexcept {
+    impl_->gc().StopFinalizerThreadIfRunning();
+}
 
 bool gc::GC::FinalizersThreadIsRunning() noexcept {
-    return false;
+    return impl_->gc().FinalizersThreadIsRunning();
 }
 
 // static
@@ -114,4 +95,21 @@ ALWAYS_INLINE void gc::GC::processArrayInMark(void* state, ArrayHeader* array) n
 // static
 ALWAYS_INLINE void gc::GC::processFieldInMark(void* state, ObjHeader* field) noexcept {
     gc::internal::processFieldInMark<gc::internal::MarkTraits>(state, field);
+}
+
+int64_t gc::GC::Schedule() noexcept {
+    return impl_->gc().Schedule();
+}
+
+void gc::GC::WaitFinalizers(int64_t epoch) noexcept {
+    impl_->gc().WaitFinalized(epoch);
+}
+
+bool gc::isMarked(ObjHeader* object) noexcept {
+    auto& objectData = mm::ObjectFactory<gc::SameThreadMarkAndSweep>::NodeRef::From(object).ObjectData();
+    return objectData.marked();
+}
+
+ALWAYS_INLINE OBJ_GETTER(gc::tryRef, std::atomic<ObjHeader*>& object) noexcept {
+    RETURN_OBJ(object.load(std::memory_order_relaxed));
 }

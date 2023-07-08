@@ -305,8 +305,16 @@ public class DefaultErrorMessages {
         MAP.put(PRIVATE_SETTER_FOR_ABSTRACT_PROPERTY, "Private setters are not allowed for abstract properties");
         MAP.put(PRIVATE_SETTER_FOR_OPEN_PROPERTY, "Private setters are not allowed for open properties");
         MAP.put(BACKING_FIELD_IN_INTERFACE, "Property in an interface cannot have a backing field");
+
         MAP.put(MUST_BE_INITIALIZED, "Property must be initialized");
+        MAP.put(MUST_BE_INITIALIZED_WARNING, "Property must be initialized. This warning will become an error in future releases.");
+        MAP.put(MUST_BE_INITIALIZED_OR_BE_FINAL, "Property must be initialized or be final");
+        MAP.put(MUST_BE_INITIALIZED_OR_BE_FINAL_WARNING, "Property must be initialized or be final. This warning will become an error in future releases.");
         MAP.put(MUST_BE_INITIALIZED_OR_BE_ABSTRACT, "Property must be initialized or be abstract");
+        MAP.put(MUST_BE_INITIALIZED_OR_BE_ABSTRACT_WARNING, "Property must be initialized or be abstract. This warning will become an error in future releases.");
+        MAP.put(MUST_BE_INITIALIZED_OR_FINAL_OR_ABSTRACT, "Property must be initialized, be final, or be abstract");
+        MAP.put(MUST_BE_INITIALIZED_OR_FINAL_OR_ABSTRACT_WARNING, "Property must be initialized, be final, or be abstract. This warning will become an error in future releases.");
+
         MAP.put(EXTENSION_PROPERTY_MUST_HAVE_ACCESSORS_OR_BE_ABSTRACT, "Extension property must have accessors or be abstract");
         MAP.put(UNNECESSARY_LATEINIT, "Lateinit is unnecessary: definitely initialized in constructors");
         MAP.put(PROPERTY_INITIALIZER_IN_INTERFACE, "Property initializers are not allowed in interfaces");
@@ -344,6 +352,8 @@ public class DefaultErrorMessages {
         MAP.put(EXPECTED_LATEINIT_PROPERTY, "Expected property cannot be lateinit");
         MAP.put(SUPERTYPE_INITIALIZED_IN_EXPECTED_CLASS, "Expected classes cannot initialize supertypes");
         MAP.put(EXPECTED_PRIVATE_DECLARATION, "Expected declaration cannot be private");
+        MAP.put(EXPECTED_EXTERNAL_DECLARATION, "Expected declaration cannot be external");
+        MAP.put(EXPECTED_TAILREC_FUNCTION, "Expected function cannot have 'tailrec' modifier");
 
         MAP.put(IMPLEMENTATION_BY_DELEGATION_IN_EXPECT_CLASS, "Implementation by delegation in expected classes is prohibited");
 
@@ -353,6 +363,10 @@ public class DefaultErrorMessages {
         MAP.put(ACTUAL_TYPE_ALIAS_WITH_COMPLEX_SUBSTITUTION, "Type arguments in the right-hand side of actual type alias should be its type parameters in the same order, e.g. 'actual typealias Foo<A, B> = Bar<A, B>'");
         MAP.put(ACTUAL_FUNCTION_WITH_DEFAULT_ARGUMENTS, "Actual function cannot have default argument values, they should be declared in the expected function");
         MAP.put(ACTUAL_ANNOTATION_CONFLICTING_DEFAULT_ARGUMENT_VALUE, "Parameter ''{0}'' has conflicting values in the expected and actual annotation", NAME);
+        MAP.put(DEFAULT_ARGUMENTS_IN_EXPECT_WITH_ACTUAL_TYPEALIAS,
+                "Default argument values inside expect declaration ''{0}'' are not allowed if it is actualized via typealias. " +
+                "Possible fix is to remove default argument values in members:{1}",
+                NAME, DESCRIPTORS_ON_NEWLINE_WITH_INDENT);
 
         MAP.put(EXPECTED_FUNCTION_SOURCE_WITH_DEFAULT_ARGUMENTS_NOT_FOUND,
                 "Expected function source is not found, therefore it's impossible to generate default argument values declared there. " +
@@ -810,6 +824,13 @@ public class DefaultErrorMessages {
         MAP.put(EXPERIMENTAL_FEATURE_WARNING, "{0}", new LanguageFeatureMessageRenderer(LanguageFeatureMessageRenderer.Type.WARNING));
 
         MAP.put(EXPLICIT_BACKING_FIELDS_UNSUPPORTED, "Explicit backing field declarations are not supported in FE 1.0");
+
+        MAP.put(UNSUPPORTED_INHERITANCE_FROM_JAVA_MEMBER_REFERENCING_KOTLIN_FUNCTION, "Inheritance of a Java member referencing 'kotlin.jvm.functions.FunctionN': {0} is unsupported", STRING);
+        MAP.put(UNSUPPORTED_SEALED_WHEN, "'sealed' in front of 'when' is reserved");
+        MAP.put(UNSUPPORTED_SEALED_FUN_INTERFACE, "'sealed fun interface' is unsupported");
+        MAP.put(UNSUPPORTED_SUSPEND_TEST, "'suspend' functions annotated with @kotlin.test.Test are unsupported");
+        MAP.put(UNSUPPORTED_REFERENCES_TO_VARIABLES_AND_PARAMETERS, "References to variables and parameters are unsupported");
+         MAP.put(UNSUPPORTED_CLASS_LITERALS_WITH_EMPTY_LHS, "Class literals with empty left hand side are unsupported");
 
         MAP.put(EXCEPTION_FROM_ANALYZER, "Internal Error occurred while analyzing this expression:\n{0}", THROWABLE);
         MAP.put(MISSING_STDLIB, "{0}. Ensure you have the standard Kotlin library in dependencies", STRING);

@@ -26,6 +26,7 @@ import org.jetbrains.kotlin.fir.backend.jvm.Fir2IrJvmSpecialAnnotationSymbolProv
 import org.jetbrains.kotlin.fir.declarations.FirDeclaration
 import org.jetbrains.kotlin.fir.declarations.FirFile
 import org.jetbrains.kotlin.fir.descriptors.FirModuleDescriptor
+import org.jetbrains.kotlin.fir.pipeline.applyIrGenerationExtensions
 import org.jetbrains.kotlin.fir.serialization.FirKLibSerializerExtension
 import org.jetbrains.kotlin.fir.serialization.serializeSingleFirFile
 import org.jetbrains.kotlin.incremental.components.LookupTracker
@@ -48,7 +49,7 @@ import org.jetbrains.kotlin.test.model.FrontendKinds
 import org.jetbrains.kotlin.test.model.TestModule
 import org.jetbrains.kotlin.test.services.TestServices
 import org.jetbrains.kotlin.test.services.compilerConfigurationProvider
-import org.jetbrains.kotlin.test.services.jsLibraryProvider
+import org.jetbrains.kotlin.test.services.libraryProvider
 import org.jetbrains.kotlin.utils.metadataVersion
 
 class Fir2IrJsResultsConverter(
@@ -120,7 +121,7 @@ class Fir2IrJsResultsConverter(
 
         var actualizedExpectDeclarations: Set<FirDeclaration>? = null
 
-        return IrBackendInput.JsIrBackendInput(
+        val result = IrBackendInput.JsIrBackendInput(
             mainIrPart,
             dependentIrParts,
             mainPluginContext,
@@ -146,11 +147,14 @@ class Fir2IrJsResultsConverter(
                 FirKLibSerializerExtension(
                     components.session, metadataVersion,
                     ConstValueProviderImpl(components),
-                    allowErrorTypes = false, exportKDoc = false
+                    allowErrorTypes = false, exportKDoc = false,
+                    components.annotationsFromPluginRegistrar.createMetadataAnnotationsProvider()
                 ),
                 configuration.languageVersionSettings,
             )
         }
+
+        return result
     }
 }
 
@@ -167,7 +171,7 @@ fun AbstractFirAnalyzerFacade.convertToJsIr(
 ): Fir2IrResult {
     this as FirAnalyzerFacade
     // TODO: consider avoiding repeated libraries resolution
-    val libraries = resolveJsLibraries(module, testServices, configuration)
+    val libraries = resolveLibraries(configuration, getAllJsDependenciesPaths(module, testServices))
     val (dependencies, builtIns) = loadResolvedLibraries(libraries, configuration.languageVersionSettings, testServices)
 
     val fir2IrConfiguration = Fir2IrConfiguration(
@@ -175,6 +179,7 @@ fun AbstractFirAnalyzerFacade.convertToJsIr(
         linkViaSignatures = generateSignatures,
         evaluatedConstTracker = configuration
             .putIfAbsent(CommonConfigurationKeys.EVALUATED_CONST_TRACKER, EvaluatedConstTracker.create()),
+        inlineConstTracker = null,
     )
     return Fir2IrConverter.createModuleFragmentWithSignaturesIfNeeded(
         session, scopeSession, firFiles.toList(),
@@ -183,7 +188,6 @@ fun AbstractFirAnalyzerFacade.convertToJsIr(
         irMangler, IrFactoryImpl,
         Fir2IrVisibilityConverter.Default,
         Fir2IrJvmSpecialAnnotationSymbolProvider(), // TODO: replace with appropriate (probably empty) implementation
-        irGeneratorExtensions,
         kotlinBuiltIns = builtIns ?: DefaultBuiltIns.Instance, // TODO: consider passing externally,
         commonMemberStorage = commonMemberStorage,
         initializedIrBuiltIns = irBuiltIns
@@ -202,7 +206,7 @@ private fun loadResolvedLibraries(
 
     return resolvedLibraries.map { resolvedLibrary ->
         // resolvedLibrary.library.libraryName in fact resolves to (modified) file path, which is confising and maybe should be refactored
-        testServices.jsLibraryProvider.getOrCreateStdlibByPath(resolvedLibrary.library.libraryName) {
+        testServices.libraryProvider.getOrCreateStdlibByPath(resolvedLibrary.library.libraryName) {
             // TODO: check safety of the approach of creating a separate storage manager per library
             val storageManager = LockBasedStorageManager("ModulesStructure")
 

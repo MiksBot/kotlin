@@ -14,7 +14,7 @@ data class Some<T : Any?> {
   }
 
   fun copy(value: T = <this>.#value): Some<T> {
-    return Some<Any>(value = value)
+    return Some<T>(value = value)
   }
 
   override operator fun equals(other: Any?): Boolean {
@@ -39,7 +39,7 @@ data class Some<T : Any?> {
   }
 
   override fun toString(): String {
-    return "Some(value=" + <this>.#value + ")"
+    return "Some(" + "value=" + <this>.#value + ")"
   }
 
 }

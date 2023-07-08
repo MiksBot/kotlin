@@ -166,6 +166,11 @@ public class RawFirBuilderLazyBodiesTestCaseGenerated extends AbstractRawFirBuil
             runTest("compiler/fir/raw-fir/psi2fir/testData/rawBuilder/declarations/initBlockWithDeclarations.kt");
         }
 
+        @TestMetadata("invalidDestructing.kt")
+        public void testInvalidDestructing() throws Exception {
+            runTest("compiler/fir/raw-fir/psi2fir/testData/rawBuilder/declarations/invalidDestructing.kt");
+        }
+
         @TestMetadata("nestedClass.kt")
         public void testNestedClass() throws Exception {
             runTest("compiler/fir/raw-fir/psi2fir/testData/rawBuilder/declarations/nestedClass.kt");
@@ -439,6 +444,11 @@ public class RawFirBuilderLazyBodiesTestCaseGenerated extends AbstractRawFirBuil
         @TestMetadata("init.kt")
         public void testInit() throws Exception {
             runTest("compiler/fir/raw-fir/psi2fir/testData/rawBuilder/expressions/init.kt");
+        }
+
+        @TestMetadata("invalidWhen.kt")
+        public void testInvalidWhen() throws Exception {
+            runTest("compiler/fir/raw-fir/psi2fir/testData/rawBuilder/expressions/invalidWhen.kt");
         }
 
         @TestMetadata("labelForInfix.kt")

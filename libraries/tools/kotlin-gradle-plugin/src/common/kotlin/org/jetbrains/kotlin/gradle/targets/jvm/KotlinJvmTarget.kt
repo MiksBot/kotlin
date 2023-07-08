@@ -10,37 +10,89 @@ import org.gradle.api.NamedDomainObjectContainer
 import org.gradle.api.Project
 import org.gradle.api.file.ConfigurableFileCollection
 import org.gradle.api.file.DuplicatesStrategy
-import org.gradle.api.plugins.JavaPlugin
+import org.gradle.api.plugins.JavaBasePlugin
 import org.gradle.api.tasks.SourceSet
-import org.gradle.api.tasks.SourceSetContainer
 import org.gradle.api.tasks.compile.AbstractCompile
-import org.gradle.api.tasks.testing.Test
-import org.gradle.jvm.tasks.Jar
 import org.gradle.language.jvm.tasks.ProcessResources
 import org.gradle.util.GradleVersion
+import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.dsl.multiplatformExtension
 import org.jetbrains.kotlin.gradle.plugin.*
+import org.jetbrains.kotlin.gradle.plugin.KotlinPluginLifecycle.Stage.AfterFinaliseDsl
+import org.jetbrains.kotlin.gradle.plugin.diagnostics.KotlinToolingDiagnostics
+import org.jetbrains.kotlin.gradle.plugin.diagnostics.reportDiagnostic
 import org.jetbrains.kotlin.gradle.plugin.internal.JavaSourceSetsAccessor
 import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinJvmCompilation
 import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinOnlyTarget
 import org.jetbrains.kotlin.gradle.plugin.mpp.internal
 import org.jetbrains.kotlin.gradle.plugin.mpp.pm20.util.copyAttributes
+import org.jetbrains.kotlin.gradle.targets.jvm.tasks.KotlinJvmRunDsl
+import org.jetbrains.kotlin.gradle.targets.jvm.tasks.KotlinJvmRunDslImpl
+import org.jetbrains.kotlin.gradle.targets.jvm.tasks.registerMainRunTask
 import org.jetbrains.kotlin.gradle.tasks.withType
+import org.jetbrains.kotlin.gradle.utils.Future
 import org.jetbrains.kotlin.gradle.utils.addExtendsFromRelation
+import org.jetbrains.kotlin.gradle.utils.findAppliedAndroidPluginIdOrNull
+import org.jetbrains.kotlin.gradle.utils.future
 import org.jetbrains.kotlin.utils.addToStdlib.cast
 import java.util.concurrent.Callable
 import javax.inject.Inject
 import kotlin.reflect.full.functions
 
 abstract class KotlinJvmTarget @Inject constructor(
-    project: Project
+    project: Project,
 ) : KotlinOnlyTarget<KotlinJvmCompilation>(project, KotlinPlatformType.jvm),
     KotlinTargetWithTests<JvmClasspathTestRunSource, KotlinJvmTestRun> {
 
     override lateinit var testRuns: NamedDomainObjectContainer<KotlinJvmTestRun>
 
+    internal val mainRun: Future<KotlinJvmRunDslImpl?> = project.future { registerMainRunTask() }
+
+    /**
+     * ### ⚠️ KotlinJvmTarget 'mainRun' is experimental
+     * The [KotlinJvmTarget], by default, creates a 'run' task called {targetName}Run, which will allows simple
+     * execution of the targets 'main' code.
+     *
+     * e.g.
+     * ```kotlin
+     * // build.gradle.kts
+     * kotlin {
+     *     jvm().mainRun {
+     *         mainClass.set("FooKt")
+     *     }
+     * }
+     *
+     * // src/jvmMain/Foo
+     * fun main() {
+     *     println("Hello from foo")
+     * }
+     * ```
+     *
+     * will be executable using
+     * ```text
+     * ./gradlew jvmRun
+     * > "Hello from foo"
+     * ```
+     *
+     * ### Running a different 'mainClass' from CLI:
+     * The execution of the main code allows providing a different 'mainClass' via CLI. *
+     * It accepts System Properties and Gradle Properties. However, when Gradle Configuration Cache is used,
+     * System Properties are the preferred way.
+     *
+     * ```text
+     * ./gradlew jvmRun -DmainClass="BarKt"
+     *                    ^
+     *                    Will execute the 'src/jvmMain/kotlin/Bar' main method.
+     * ```
+     */
+    @ExperimentalKotlinGradlePluginApi
+    fun mainRun(configure: KotlinJvmRunDsl.() -> Unit) = project.launch {
+        mainRun.await()?.configure()
+    }
+
     var withJavaEnabled = false
         private set
+
 
     @Suppress("unused") // user DSL
     fun withJava() {
@@ -55,9 +107,28 @@ abstract class KotlinJvmTarget @Inject constructor(
                 )
             }
 
+
+        /**
+         * Reports diagnostic in the case of
+         * ```kotlin
+         * kotlin {
+         *     jvm().withJava()
+         * }
+         * ```
+         *
+         * is used together with the Android Gradle Plugin.
+         * This case is incompatible so far, as the 'withJava' implementation is still using 'global' namespaces
+         * (like main/test, etc), which will clash with the global names used by AGP (also occupying main, test, etc).
+         */
+        val trace = Throwable()
+        project.launchInStage(AfterFinaliseDsl) check@{
+            val androidPluginId = project.findAppliedAndroidPluginIdOrNull() ?: return@check
+            project.reportDiagnostic(KotlinToolingDiagnostics.JvmWithJavaIsIncompatibleWithAndroid(androidPluginId, trace))
+        }
+
         withJavaEnabled = true
 
-        project.plugins.apply(JavaPlugin::class.java)
+        project.plugins.apply(JavaBasePlugin::class.java)
         val javaSourceSets = project.variantImplementationFactory<JavaSourceSetsAccessor.JavaSourceSetsAccessorVariantFactory>()
             .getInstance(project)
             .sourceSets
@@ -88,25 +159,16 @@ abstract class KotlinJvmTarget @Inject constructor(
             setupDependenciesCrossInclusionForJava(compilation, javaSourceSet)
         }
 
-        project.afterEvaluate {
+        project.launchInStage(AfterFinaliseDsl) {
             javaSourceSets.all { javaSourceSet ->
                 copyUserDefinedAttributesToJavaConfigurations(javaSourceSet)
             }
         }
-
-        // Eliminate the Java output configurations from dependency resolution to avoid ambiguity between them and
-        // the equivalent configurations created for the target:
-        listOf(JavaPlugin.API_ELEMENTS_CONFIGURATION_NAME, JavaPlugin.RUNTIME_ELEMENTS_CONFIGURATION_NAME)
-            .forEach { outputConfigurationName ->
-                project.configurations.findByName(outputConfigurationName)?.isCanBeConsumed = false
-            }
-
-        disableJavaPluginTasks(javaSourceSets)
     }
 
     private fun setupJavaSourceSetSourcesAndResources(
         javaSourceSet: SourceSet,
-        compilation: KotlinJvmCompilation
+        compilation: KotlinJvmCompilation,
     ) {
         javaSourceSet.java.setSrcDirs(listOf("src/${compilation.defaultSourceSet.name}/java"))
         compilation.defaultSourceSet.kotlin.srcDirs(javaSourceSet.java.sourceDirectories)
@@ -133,27 +195,9 @@ abstract class KotlinJvmTarget @Inject constructor(
         }
     }
 
-    private fun disableJavaPluginTasks(javaSourceSet: SourceSetContainer) {
-        // A 'normal' build should not do redundant job like running the tests twice or building two JARs,
-        // so disable some tasks and just make them depend on the others:
-        val targetJar = project.tasks.withType(Jar::class.java).named(artifactsTaskName)
-
-        project.tasks.withType(Jar::class.java).named(javaSourceSet.getByName("main").jarTaskName) { javaJar ->
-            (javaJar.source as? ConfigurableFileCollection)?.setFrom(targetJar.map { it.source })
-            javaJar.archiveFileName.set(targetJar.flatMap { it.archiveFileName })
-            javaJar.dependsOn(targetJar)
-            javaJar.enabled = false
-        }
-
-        project.tasks.withType(Test::class.java).named(JavaPlugin.TEST_TASK_NAME) { javaTestTask ->
-            javaTestTask.dependsOn(project.tasks.named(testTaskName))
-            javaTestTask.enabled = false
-        }
-    }
-
     private fun setupDependenciesCrossInclusionForJava(
         compilation: KotlinJvmCompilation,
-        javaSourceSet: SourceSet
+        javaSourceSet: SourceSet,
     ) {
         // Make sure Kotlin compilation dependencies appear in the Java source set classpaths:
 

@@ -116,12 +116,6 @@ public class JsIrInvalidationTestGenerated extends AbstractJsIrInvalidationTest 
     }
 
     @Test
-    @TestMetadata("esModules")
-    public void testEsModules() throws Exception {
-        runTest("js/js.translator/testData/incremental/invalidation/esModules/");
-    }
-
-    @Test
     @TestMetadata("exceptionsFromInlineFunction")
     public void testExceptionsFromInlineFunction() throws Exception {
         runTest("js/js.translator/testData/incremental/invalidation/exceptionsFromInlineFunction/");
@@ -275,6 +269,12 @@ public class JsIrInvalidationTestGenerated extends AbstractJsIrInvalidationTest 
     @TestMetadata("interfaceOpenMethods")
     public void testInterfaceOpenMethods() throws Exception {
         runTest("js/js.translator/testData/incremental/invalidation/interfaceOpenMethods/");
+    }
+
+    @Test
+    @TestMetadata("interfaceOpenMethodsInOpenClass")
+    public void testInterfaceOpenMethodsInOpenClass() throws Exception {
+        runTest("js/js.translator/testData/incremental/invalidation/interfaceOpenMethodsInOpenClass/");
     }
 
     @Test

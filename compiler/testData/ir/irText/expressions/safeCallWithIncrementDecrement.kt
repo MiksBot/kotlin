@@ -1,6 +1,3 @@
-// MUTE_SIGNATURE_COMPARISON_K2: ANY
-// ^ KT-57433
-
 package test
 
 class C

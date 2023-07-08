@@ -70,3 +70,4 @@ fun FirReference.isError(): Boolean {
         else -> false
     }
 }
+

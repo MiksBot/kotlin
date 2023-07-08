@@ -7,25 +7,24 @@ package org.jetbrains.kotlin.gradle.plugin.mpp
 
 import org.gradle.api.Plugin
 import org.gradle.api.Project
-import org.gradle.api.file.DuplicatesStrategy
-import org.gradle.api.plugins.BasePlugin
 import org.gradle.api.plugins.JavaBasePlugin
-import org.gradle.api.tasks.TaskProvider
-import org.gradle.jvm.tasks.Jar
 import org.gradle.util.GradleVersion
 import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
+import org.jetbrains.kotlin.gradle.dsl.explicitApiModeAsCompilerArg
 import org.jetbrains.kotlin.gradle.dsl.kotlinExtension
 import org.jetbrains.kotlin.gradle.dsl.multiplatformExtension
 import org.jetbrains.kotlin.gradle.internal.customizeKotlinDependencies
 import org.jetbrains.kotlin.gradle.plugin.*
+import org.jetbrains.kotlin.gradle.plugin.hierarchy.orNull
+import org.jetbrains.kotlin.gradle.plugin.hierarchy.setupDefaultKotlinHierarchy
 import org.jetbrains.kotlin.gradle.plugin.ide.kotlinIdeMultiplatformImport
 import org.jetbrains.kotlin.gradle.plugin.ide.locateOrRegisterIdeResolveDependenciesTask
 import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinMultiplatformPlugin.Companion.sourceSetFreeCompilerArgsPropertyName
 import org.jetbrains.kotlin.gradle.plugin.mpp.apple.addBuildListenerForXcode
 import org.jetbrains.kotlin.gradle.plugin.mpp.internal.runDeprecationDiagnostics
 import org.jetbrains.kotlin.gradle.plugin.mpp.pm20.util.copyAttributes
-import org.jetbrains.kotlin.gradle.plugin.mpp.targetHierarchy.orNull
 import org.jetbrains.kotlin.gradle.plugin.sources.DefaultLanguageSettingsBuilder
+import org.jetbrains.kotlin.gradle.plugin.sources.awaitPlatformCompilations
 import org.jetbrains.kotlin.gradle.plugin.sources.checkSourceSetVisibilityRequirements
 import org.jetbrains.kotlin.gradle.plugin.sources.internal
 import org.jetbrains.kotlin.gradle.plugin.statistics.KotlinBuildStatsService
@@ -35,14 +34,12 @@ import org.jetbrains.kotlin.gradle.targets.js.ir.KotlinWasmTargetPreset
 import org.jetbrains.kotlin.gradle.targets.native.createFatFrameworks
 import org.jetbrains.kotlin.gradle.targets.native.tasks.artifact.registerKotlinArtifactsExtension
 import org.jetbrains.kotlin.gradle.tasks.AbstractKotlinCompileTool
-import org.jetbrains.kotlin.gradle.tasks.locateTask
-import org.jetbrains.kotlin.gradle.tasks.registerTask
-import org.jetbrains.kotlin.gradle.utils.*
+import org.jetbrains.kotlin.gradle.utils.checkGradleCompatibility
+import org.jetbrains.kotlin.gradle.utils.runProjectConfigurationHealthCheck
 import org.jetbrains.kotlin.konan.target.HostManager
 import org.jetbrains.kotlin.konan.target.KonanTarget.*
 import org.jetbrains.kotlin.konan.target.presetName
 import org.jetbrains.kotlin.statistics.metrics.StringMetrics
-import java.io.File
 
 class KotlinMultiplatformPlugin : Plugin<Project> {
 
@@ -57,6 +54,7 @@ class KotlinMultiplatformPlugin : Plugin<Project> {
         setupDefaultPresets(project)
         customizeKotlinDependencies(project)
         configureSourceSets(project)
+        setupTargetsBuildStatsReport(project)
 
         // set up metadata publishing
         kotlinMultiplatformExtension.targetFromPreset(
@@ -173,25 +171,8 @@ class KotlinMultiplatformPlugin : Plugin<Project> {
         sourceSets.create(KotlinSourceSet.COMMON_MAIN_SOURCE_SET_NAME)
         sourceSets.create(KotlinSourceSet.COMMON_TEST_SOURCE_SET_NAME)
 
-        /* Create default 'dependsOn' to commonMain/commonTest (or even common{SourceSetTree}) */
-        targets.all { target ->
-            project.launchInStage(KotlinPluginLifecycle.Stage.FinaliseRefinesEdges) {
-                /* Only setup default refines edges when no KotlinTargetHierarchy was applied */
-                if (project.multiplatformExtension.internalKotlinTargetHierarchy.appliedDescriptors.isNotEmpty()) return@launchInStage
-
-                target.compilations.forEach { compilation ->
-                    val sourceSetTree = KotlinTargetHierarchy.SourceSetTree.orNull(compilation) ?: return@forEach
-                    val commonSourceSet = sourceSets.findByName(lowerCamelCaseName("common", sourceSetTree.name)) ?: return@forEach
-                    compilation.defaultSourceSet.dependsOn(commonSourceSet)
-                }
-            }
-
-            /* Report the platform to tbe build stats service */
-            val targetName = if (target is KotlinNativeTarget)
-                target.konanTarget.name
-            else
-                target.platformType.name
-            KotlinBuildStatsService.getInstance()?.report(StringMetrics.MPP_PLATFORMS, targetName)
+        project.launch {
+            project.setupDefaultKotlinHierarchy()
         }
 
         project.launchInStage(KotlinPluginLifecycle.Stage.ReadyForExecution) {
@@ -201,6 +182,18 @@ class KotlinMultiplatformPlugin : Plugin<Project> {
         }
     }
 
+    private fun setupTargetsBuildStatsReport(project: Project) {
+        project.multiplatformExtension.targets.all { target ->
+            /* Report the platform to tbe build stats service */
+            val targetName = if (target is KotlinNativeTarget)
+                target.konanTarget.name
+            else
+                target.platformType.name
+            KotlinBuildStatsService.getInstance()?.report(StringMetrics.MPP_PLATFORMS, targetName)
+        }
+    }
+
+
     companion object {
         const val METADATA_TARGET_NAME = "metadata"
 
@@ -209,125 +202,23 @@ class KotlinMultiplatformPlugin : Plugin<Project> {
     }
 }
 
-/**
- * The attributes attached to the targets and compilations need to be propagated to the relevant Gradle configurations:
- * 1. Output configurations of each target need the corresponding compilation's attributes (and, indirectly, the target's attributes)
- * 2. Resolvable configurations of each compilation need the compilation's attributes
- */
-internal fun applyUserDefinedAttributes(target: AbstractKotlinTarget) {
-    val project = target.project
-    project.whenEvaluated {
-        // To copy the attributes to the output configurations, find those output configurations and their producing compilations
-        // based on the target's components:
-        val outputConfigurationsWithCompilations = target.kotlinComponents.filterIsInstance<KotlinVariant>().flatMap { kotlinVariant ->
-            kotlinVariant.usages.mapNotNull { usageContext ->
-                project.configurations.findByName(usageContext.dependencyConfigurationName)?.let { configuration ->
-                    configuration to usageContext.compilation
-                }
-            }
-        }.toMutableList()
-
-        val mainCompilation = target.compilations.findByName(KotlinCompilation.MAIN_COMPILATION_NAME)
-        val defaultTargetConfiguration = project.configurations.findByName(target.defaultConfigurationName)
-        if (mainCompilation != null && defaultTargetConfiguration != null) {
-            outputConfigurationsWithCompilations += defaultTargetConfiguration to mainCompilation
-        }
-
-        // Add usages of android library when its variants are grouped by flavor
-        outputConfigurationsWithCompilations += target.kotlinComponents
-            .filterIsInstance<JointAndroidKotlinTargetComponent>()
-            .flatMap { variant -> variant.usages }
-            .mapNotNull { usage ->
-                val configuration = project.configurations.findByName(usage.dependencyConfigurationName) ?: return@mapNotNull null
-                configuration to usage.compilation
-            }
-
-        outputConfigurationsWithCompilations.forEach { (configuration, compilation) ->
-            copyAttributes(compilation.attributes, configuration.attributes)
-        }
-
-        target.compilations.all { compilation ->
-            val compilationAttributes = compilation.attributes
-
-            @Suppress("DEPRECATION")
-            compilation.relatedConfigurationNames
-                .mapNotNull { configurationName -> target.project.configurations.findByName(configurationName) }
-                .forEach { configuration -> copyAttributes(compilationAttributes, configuration.attributes) }
-        }
-
-        // Copy to host-specific metadata elements configurations
-        if (target is KotlinNativeTarget) {
-            val hostSpecificMetadataElements = project.configurations.findByName(target.hostSpecificMetadataElementsConfigurationName)
-            if (hostSpecificMetadataElements != null) {
-                copyAttributes(from = target.attributes, to = hostSpecificMetadataElements.attributes)
-            }
-        }
-    }
-}
-
-internal fun sourcesJarTask(compilation: KotlinCompilation<*>, componentName: String, artifactNameAppendix: String): TaskProvider<Jar> =
-    sourcesJarTask(
-        compilation.target.project,
-        compilation.target.project.future {
-            KotlinPluginLifecycle.Stage.AfterFinaliseCompilations.await()
-            compilation.allKotlinSourceSets.associate { it.name to it.kotlin }
-        },
-        componentName,
-        artifactNameAppendix
-    )
-
-private fun sourcesJarTask(
-    project: Project,
-    sourceSets: Future<Map<String, Iterable<File>>>,
-    taskNamePrefix: String,
-    artifactNameAppendix: String,
-): TaskProvider<Jar> =
-    sourcesJarTaskNamed(lowerCamelCaseName(taskNamePrefix, "sourcesJar"), taskNamePrefix, project, sourceSets, artifactNameAppendix)
-
-internal fun sourcesJarTaskNamed(
-    taskName: String,
-    componentName: String,
-    project: Project,
-    sourceSets: Future<Map<String, Iterable<File>>>,
-    artifactNameAppendix: String,
-    componentTypeName: String = "target",
-): TaskProvider<Jar> {
-    project.locateTask<Jar>(taskName)?.let {
-        return it
-    }
-
-    val result = project.registerTask<Jar>(taskName) { sourcesJar ->
-        sourcesJar.archiveAppendix.set(artifactNameAppendix)
-        sourcesJar.archiveClassifier.set("sources")
-        sourcesJar.isPreserveFileTimestamps = false
-        sourcesJar.isReproducibleFileOrder = true
-        sourcesJar.group = BasePlugin.BUILD_GROUP
-        sourcesJar.description = "Assembles a jar archive containing the sources of $componentTypeName '$componentName'."
-    }
-
-    result.configure {
-        project.launch {
-            sourceSets.await().forEach { (sourceSetName, sourceSetFiles) ->
-                it.from(sourceSetFiles) { copySpec ->
-                    copySpec.into(sourceSetName)
-                    // Duplicates are coming from `SourceSets` that `sourceSet` depends on.
-                    // Such dependency was added by Kotlin compilation.
-                    // TODO: rethink approach for adding dependent `SourceSets` to Kotlin compilation `SourceSet`
-                    copySpec.duplicatesStrategy = DuplicatesStrategy.WARN
-                }
-            }
-        }
-    }
-
-    return result
-}
-
 internal fun Project.setupGeneralKotlinExtensionParameters() {
-    kotlinExtension.sourceSets.all { sourceSet ->
-        (sourceSet.languageSettings as? DefaultLanguageSettingsBuilder)?.run {
+    project.launch {
+        for (sourceSet in kotlinExtension.awaitSourceSets()) {
+            val languageSettings = sourceSet.languageSettings
+            if (languageSettings !is DefaultLanguageSettingsBuilder) continue
 
-            // Set ad-hoc free compiler args from the internal project property
-            freeCompilerArgsProvider = project.provider {
+            val isMainSourceSet = sourceSet
+                .internal
+                .awaitPlatformCompilations()
+                .any { KotlinSourceSetTree.orNull(it) == KotlinSourceSetTree.main }
+
+            languageSettings.explicitApi = project.providers.provider {
+                val explicitApiFlag = project.kotlinExtension.explicitApiModeAsCompilerArg()
+                explicitApiFlag.takeIf { isMainSourceSet }
+            }
+
+            languageSettings.freeCompilerArgsProvider = project.provider {
                 val propertyValue = with(project.extensions.extraProperties) {
                     val sourceSetFreeCompilerArgsPropertyName = sourceSetFreeCompilerArgsPropertyName(sourceSet.name)
                     if (has(sourceSetFreeCompilerArgsPropertyName)) {

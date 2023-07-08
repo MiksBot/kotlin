@@ -15,13 +15,11 @@ import org.jetbrains.kotlin.fir.FirElementWithResolveState
 import org.jetbrains.kotlin.fir.FirFileAnnotationsContainer
 import org.jetbrains.kotlin.fir.FirSession
 import org.jetbrains.kotlin.fir.declarations.*
-import org.jetbrains.kotlin.fir.resolve.ResolutionMode
 import org.jetbrains.kotlin.fir.resolve.ScopeSession
 import org.jetbrains.kotlin.fir.resolve.transformers.body.resolve.FirImplicitAwareBodyResolveTransformer
-import org.jetbrains.kotlin.fir.resolve.transformers.body.resolve.FirTowerDataContextCollector
+import org.jetbrains.kotlin.fir.resolve.transformers.body.resolve.FirResolveContextCollector
 import org.jetbrains.kotlin.fir.resolve.transformers.body.resolve.ImplicitBodyResolveComputationSession
 import org.jetbrains.kotlin.fir.scopes.fakeOverrideSubstitution
-import org.jetbrains.kotlin.fir.visitors.transformSingle
 
 internal object LLFirImplicitTypesLazyResolver : LLFirLazyResolver(FirResolvePhase.IMPLICIT_TYPES_BODY_RESOLVE) {
     override fun resolve(
@@ -29,7 +27,7 @@ internal object LLFirImplicitTypesLazyResolver : LLFirLazyResolver(FirResolvePha
         lockProvider: LLFirLockProvider,
         session: FirSession,
         scopeSession: ScopeSession,
-        towerDataContextCollector: FirTowerDataContextCollector?,
+        towerDataContextCollector: FirResolveContextCollector?,
     ) {
         val resolver = LLFirImplicitBodyTargetResolver(target, lockProvider, session, scopeSession, towerDataContextCollector)
         resolver.resolveDesignation()
@@ -58,7 +56,7 @@ internal class LLFirImplicitBodyTargetResolver(
     lockProvider: LLFirLockProvider,
     session: FirSession,
     scopeSession: ScopeSession,
-    towerDataContextCollector: FirTowerDataContextCollector?,
+    firResolveContextCollector: FirResolveContextCollector?,
     implicitBodyResolveComputationSession: ImplicitBodyResolveComputationSession? = null,
 ) : LLFirAbstractBodyTargetResolver(
     target,
@@ -74,36 +72,35 @@ internal class LLFirImplicitBodyTargetResolver(
         phase = resolverPhase,
         implicitTypeOnly = true,
         scopeSession = scopeSession,
-        firTowerDataContextCollector = towerDataContextCollector,
-        returnTypeCalculator = createReturnTypeCalculator(towerDataContextCollector = towerDataContextCollector),
+        firResolveContextCollector = firResolveContextCollector,
+        returnTypeCalculator = createReturnTypeCalculator(firResolveContextCollector = firResolveContextCollector),
     ) {
         override val preserveCFGForClasses: Boolean get() = false
     }
 
     override fun doLazyResolveUnderLock(target: FirElementWithResolveState) {
         when (target) {
+            is FirFunction -> resolve(target, BodyStateKeepers.FUNCTION)
+            is FirProperty -> resolve(target, BodyStateKeepers.PROPERTY)
+            is FirVariable -> resolve(target, BodyStateKeepers.VARIABLE)
             is FirRegularClass,
-            is FirDanglingModifierList,
-            is FirAnonymousInitializer,
-            is FirFileAnnotationsContainer,
             is FirTypeAlias,
             is FirScript,
-            is FirConstructor,
-            -> {
-                // no implicit bodies here
+            is FirAnonymousInitializer,
+            is FirDanglingModifierList,
+            is FirFileAnnotationsContainer -> {
+                // No implicit bodies here
             }
-
-            is FirCallableDeclaration -> {
-                if (target.attributes.fakeOverrideSubstitution != null) {
-                    transformer.returnTypeCalculator.fakeOverrideTypeCalculator.computeReturnType(target)
-                } else {
-                    calculateLazyBodies(target)
-                    target.transformSingle(transformer, ResolutionMode.ContextIndependent)
-                }
-            }
-
             else -> throwUnexpectedFirElementError(target)
         }
     }
-}
 
+    override fun rawResolve(target: FirElementWithResolveState) {
+        if (target is FirCallableDeclaration && target.attributes.fakeOverrideSubstitution != null) {
+            transformer.returnTypeCalculator.fakeOverrideTypeCalculator.computeReturnType(target)
+            return
+        }
+
+        super.rawResolve(target)
+    }
+}

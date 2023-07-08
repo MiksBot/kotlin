@@ -7,7 +7,6 @@ package org.jetbrains.kotlin.fir.backend
 
 import org.jetbrains.kotlin.KtPsiSourceFileLinesMapping
 import org.jetbrains.kotlin.KtSourceFileLinesMappingFromLineStartOffsets
-import org.jetbrains.kotlin.backend.common.extensions.IrGenerationExtension
 import org.jetbrains.kotlin.builtins.DefaultBuiltIns
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.config.AnalysisFlags
@@ -35,8 +34,6 @@ import org.jetbrains.kotlin.ir.interpreter.checker.EvaluationMode
 import org.jetbrains.kotlin.ir.interpreter.transformer.transformConst
 import org.jetbrains.kotlin.ir.util.KotlinMangler
 import org.jetbrains.kotlin.ir.util.NaiveSourceBasedFileEntryImpl
-import org.jetbrains.kotlin.ir.visitors.acceptVoid
-import org.jetbrains.kotlin.platform.isJs
 import org.jetbrains.kotlin.psi.KtFile
 
 class Fir2IrConverter(
@@ -52,9 +49,7 @@ class Fir2IrConverter(
     private fun runSourcesConversion(
         allFirFiles: List<FirFile>,
         irModuleFragment: IrModuleFragmentImpl,
-        irGenerationExtensions: Collection<IrGenerationExtension>,
         fir2irVisitor: Fir2IrVisitor,
-        fir2IrExtensions: Fir2IrExtensions,
         runPreCacheBuiltinClasses: Boolean
     ) {
         session.lazyDeclarationResolver.disableLazyResolveContractChecks()
@@ -98,15 +93,6 @@ class Fir2IrConverter(
         }
 
         evaluateConstants(irModuleFragment, configuration)
-
-        if (irGenerationExtensions.isNotEmpty()) {
-            val pluginContext = Fir2IrPluginContext(components, irModuleFragment.descriptor)
-            for (extension in irGenerationExtensions) {
-                extension.generate(irModuleFragment, pluginContext)
-            }
-        }
-
-        irModuleFragment.acceptVoid(ExternalPackageParentPatcher(components, fir2IrExtensions))
     }
 
     fun bindFakeOverridesOrPostpone(declarations: List<IrDeclaration>) {
@@ -216,7 +202,8 @@ class Fir2IrConverter(
 
     internal fun processRegularClassMembers(
         regularClass: FirRegularClass,
-        irClass: IrClass = classifierStorage.getCachedIrClass(regularClass)!!
+        irClass: IrClass =
+            classifierStorage.getCachedIrClass(regularClass) ?: error("Expecting existing IrClass for class ${regularClass.name}")
     ): IrClass {
         val allDeclarations = mutableListOf<FirDeclaration>().apply {
             addAll(regularClass.declarations)
@@ -357,9 +344,23 @@ class Fir2IrConverter(
                 processRegularClassMembers(declaration)
             }
             is FirScript -> {
-                assert(parent is IrFile)
+                parent as IrFile
                 declarationStorage.getOrCreateIrScript(declaration).also { irScript ->
                     declarationStorage.enterScope(irScript)
+                    irScript.parent = parent
+                    for (scriptStatement in declaration.statements) {
+                        if (scriptStatement is FirDeclaration) {
+                            when (scriptStatement) {
+                                is FirRegularClass -> {
+                                    registerClassAndNestedClasses(scriptStatement, irScript)
+                                    processClassAndNestedClassHeaders(scriptStatement)
+                                }
+                                is FirTypeAlias -> classifierStorage.registerTypeAlias(scriptStatement, irScript)
+                                else -> {}
+                            }
+
+                        }
+                    }
                     for (scriptStatement in declaration.statements) {
                         if (scriptStatement is FirDeclaration) {
                             processMemberDeclaration(scriptStatement, null, irScript)
@@ -425,13 +426,13 @@ class Fir2IrConverter(
             val intrinsicConstEvaluation = languageVersionSettings?.supportsFeature(LanguageFeature.IntrinsicConstEvaluation) == true
 
             val configuration = IrInterpreterConfiguration(
+                platform = targetPlatform,
                 printOnlyExceptionMessage = true,
-                treatFloatInSpecialWay = targetPlatform.isJs()
             )
             val interpreter = IrInterpreter(IrInterpreterEnvironment(irModuleFragment.irBuiltins, configuration))
             val mode = if (intrinsicConstEvaluation) EvaluationMode.ONLY_INTRINSIC_CONST else EvaluationMode.ONLY_BUILTINS
             irModuleFragment.files.forEach {
-                it.transformConst(interpreter, mode = mode, evaluatedConstTracker = fir2IrConfiguration.evaluatedConstTracker)
+                it.transformConst(interpreter, mode, fir2IrConfiguration.evaluatedConstTracker, fir2IrConfiguration.inlineConstTracker)
             }
         }
 
@@ -445,7 +446,6 @@ class Fir2IrConverter(
             irFactory: IrFactory,
             visibilityConverter: Fir2IrVisibilityConverter,
             specialSymbolProvider: Fir2IrSpecialSymbolProvider,
-            irGenerationExtensions: Collection<IrGenerationExtension>,
             kotlinBuiltIns: KotlinBuiltIns,
             commonMemberStorage: Fir2IrCommonMemberStorage,
             initializedIrBuiltIns: IrBuiltInsOverFir?
@@ -480,6 +480,7 @@ class Fir2IrConverter(
             components.fakeOverrideGenerator = FakeOverrideGenerator(components, conversionScope)
             components.callGenerator = CallAndReferenceGenerator(components, fir2irVisitor, conversionScope)
             components.irProviders = listOf(FirIrProvider(components))
+            components.annotationsFromPluginRegistrar = Fir2IrAnnotationsFromPluginRegistrar(components)
 
             fir2IrExtensions.registerDeclarations(commonMemberStorage.symbolTable)
 
@@ -491,8 +492,7 @@ class Fir2IrConverter(
             }
 
             converter.runSourcesConversion(
-                allFirFiles, irModuleFragment, irGenerationExtensions, fir2irVisitor, fir2IrExtensions,
-                runPreCacheBuiltinClasses = initializedIrBuiltIns == null
+                allFirFiles, irModuleFragment, fir2irVisitor, runPreCacheBuiltinClasses = initializedIrBuiltIns == null
             )
 
             return Fir2IrResult(irModuleFragment, components, moduleDescriptor)

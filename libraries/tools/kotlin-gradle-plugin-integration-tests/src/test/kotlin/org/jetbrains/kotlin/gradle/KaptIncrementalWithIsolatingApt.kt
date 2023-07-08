@@ -166,6 +166,7 @@ open class KaptIncrementalWithIsolatingApt : KaptIncrementalIT() {
 
     @DisplayName("KT-33617: sources in compile classpath jars")
     @JdkVersions(versions = [JavaVersion.VERSION_11])
+    @GradleTestVersions(maxVersion = TestVersions.Gradle.G_7_6)
     @GradleWithJdkTest
     fun testSourcesInCompileClasspathJars(gradleVersion: GradleVersion, jdk: JdkVersions.ProvidedJdk) {
         kaptProject(gradleVersion, buildJdk = jdk.location) {
@@ -286,7 +287,6 @@ open class KaptIncrementalWithIsolatingApt : KaptIncrementalIT() {
 
     @AndroidGradlePluginTests
     @DisplayName("KT-34340: origins in classpath")
-    @AndroidTestVersions(minVersion = TestVersions.AGP.AGP_42)
     @GradleAndroidTest
     @DisabledOnOs(OS.WINDOWS, disabledReason = "https://youtrack.jetbrains.com/issue/KTI-405")
     fun testIsolatingWithOriginsInClasspath(

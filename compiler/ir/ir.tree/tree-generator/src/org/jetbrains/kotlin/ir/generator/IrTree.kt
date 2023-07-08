@@ -5,10 +5,7 @@
 
 package org.jetbrains.kotlin.ir.generator
 
-import com.squareup.kotlinpoet.FunSpec
-import com.squareup.kotlinpoet.PropertySpec
-import com.squareup.kotlinpoet.KModifier
-import com.squareup.kotlinpoet.MemberName
+import com.squareup.kotlinpoet.*
 import org.jetbrains.kotlin.descriptors.ClassKind
 import org.jetbrains.kotlin.descriptors.Modality
 import org.jetbrains.kotlin.descriptors.SourceElement
@@ -23,6 +20,7 @@ import org.jetbrains.kotlin.ir.generator.config.SimpleFieldConfig
 import org.jetbrains.kotlin.ir.generator.model.Element.Companion.elementName2typeName
 import org.jetbrains.kotlin.ir.generator.print.toPoet
 import org.jetbrains.kotlin.ir.generator.util.*
+import org.jetbrains.kotlin.ir.generator.util.Import
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.serialization.deserialization.descriptors.DeserializedContainerSource
@@ -33,8 +31,9 @@ import org.jetbrains.kotlin.types.Variance
 // 2) parents
 // 3) fields
 object IrTree : AbstractTreeBuilder() {
-    private fun symbol(type: TypeRef) = field("symbol", type, mutable = false)
-    private fun descriptor(typeName: String) =
+    private fun symbol(type: TypeRef, mutable: Boolean = false): SimpleFieldConfig =
+        field("symbol", type, mutable = mutable)
+    private fun descriptor(typeName: String): SimpleFieldConfig =
         field("descriptor", ClassRef<TypeParameterRef>(TypeKind.Interface, "org.jetbrains.kotlin.descriptors", typeName), mutable = false)
 
     private val factory: SimpleFieldConfig = field("factory", type(Packages.declarations, "IrFactory"), mutable = false)
@@ -165,11 +164,36 @@ object IrTree : AbstractTreeBuilder() {
         +field("varargElementType", irTypeType, nullable = true)
         +field("isCrossinline", boolean)
         +field("isNoinline", boolean)
-        // if true parameter is not included into IdSignature.
-        // Skipping hidden params makes IrFunction be look similar to FE.
-        // NOTE: it is introduced to fix KT-40980 because more clear solution was not possible to implement.
-        // Once we are able to load any top-level declaration from klib this hack should be deprecated and removed.
-        +field("isHidden", boolean)
+        +field("isHidden", boolean) {
+            additionalImports.add(Import("org.jetbrains.kotlin.ir.util", "IdSignature"))
+            kdoc = """
+            If `true`, the value parameter does not participate in [IdSignature] computation.
+
+            This is a workaround that is needed for better support of compiler plugins.
+            Suppose you have the following code and some IR plugin that adds a value parameter to functions
+            marked with the `@PluginMarker` annotation.
+            ```kotlin
+            @PluginMarker
+            fun foo(defined: Int) { /* ... */ }
+            ```
+
+            Suppose that after applying the plugin the function is changed to:
+            ```kotlin
+            @PluginMarker
+            fun foo(defined: Int, ${'$'}extra: String) { /* ... */ }
+            ```
+
+            If a compiler plugin adds parameters to an [${elementName2typeName(function.name)}],
+            the representations of the function in the frontend and in the backend may diverge, potentially causing signature mismatch and
+            linkage errors (see [KT-40980](https://youtrack.jetbrains.com/issue/KT-40980)).
+            We wouldn't want IR plugins to affect the frontend representation, since in an IDE you'd want to be able to see those
+            declarations in their original form (without the `${'$'}extra` parameter).
+
+            To fix this problem, [$name] was introduced.
+            
+            TODO: consider dropping [$name] if it isn't used by any known plugin.
+            """.trimIndent()
+        }
         +field("defaultValue", expressionBody, nullable = true, isChild = true)
     }
     val `class`: ElementConfig by element(Declaration) {
@@ -512,7 +536,19 @@ object IrTree : AbstractTreeBuilder() {
 
         +symbol(packageFragmentSymbolType)
         +field("packageFragmentDescriptor", type(Packages.descriptors, "PackageFragmentDescriptor"), mutable = false)
-        +field("fqName", type<FqName>())
+        +field("packageFqName", type<FqName>())
+        +field("fqName", type<FqName>()) {
+            baseGetter = code("packageFqName")
+            generationCallback = {
+                val deprecatedAnnotation = AnnotationSpec.builder(Deprecated::class)
+                    .addMember(code("message = \"Please use `packageFqName` instead\""))
+                    .addMember(code("replaceWith = ReplaceWith(\"packageFqName\")"))
+                    .addMember(code("level = DeprecationLevel.ERROR"))
+                    .build()
+                addAnnotation(deprecatedAnnotation)
+                setter(FunSpec.setterBuilder().addParameter("value", FqName::class).addCode(code("packageFqName = value")).build())
+            }
+        }
     }
     val externalPackageFragment: ElementConfig by element(Declaration) {
         visitorParent = packageFragment
@@ -681,7 +717,7 @@ object IrTree : AbstractTreeBuilder() {
 
         parent(functionAccessExpression)
 
-        +symbol(constructorSymbolType)
+        +symbol(constructorSymbolType, mutable = true)
         +field("source", type<SourceElement>())
         +field("constructorTypeArgumentsCount", int)
     }
@@ -696,14 +732,14 @@ object IrTree : AbstractTreeBuilder() {
 
         parent(getSingletonValue)
 
-        +symbol(classSymbolType)
+        +symbol(classSymbolType, mutable = true)
     }
     val getEnumValue: ElementConfig by element(Expression) {
         visitorParent = getSingletonValue
 
         parent(getSingletonValue)
 
-        +symbol(enumEntrySymbolType)
+        +symbol(enumEntrySymbolType, mutable = true)
     }
 
     /**
@@ -717,7 +753,7 @@ object IrTree : AbstractTreeBuilder() {
 
         parent(declarationReference)
 
-        +symbol(functionSymbolType)
+        +symbol(functionSymbolType, mutable = true)
     }
     val containerExpression: ElementConfig by element(Expression) {
         visitorParent = expression
@@ -793,7 +829,7 @@ object IrTree : AbstractTreeBuilder() {
 
         parent(functionAccessExpression)
 
-        +symbol(simpleFunctionSymbolType)
+        +symbol(simpleFunctionSymbolType, mutable = true)
         +field("superQualifierSymbol", classSymbolType, nullable = true)
     }
     val callableReference: ElementConfig by element(Expression) {
@@ -801,6 +837,8 @@ object IrTree : AbstractTreeBuilder() {
         val s = +param("S", symbolType)
 
         parent(memberAccessExpression.withArgs("S" to s))
+
+        +symbol(s, mutable = true)
     }
     val functionReference: ElementConfig by element(Expression) {
         visitorParent = callableReference
@@ -832,7 +870,7 @@ object IrTree : AbstractTreeBuilder() {
 
         parent(declarationReference)
 
-        +symbol(classifierSymbolType)
+        +symbol(classifierSymbolType, mutable = true)
         +field("classType", irTypeType)
     }
     val const: ElementConfig by element(Expression) {
@@ -894,7 +932,7 @@ object IrTree : AbstractTreeBuilder() {
 
         parent(functionAccessExpression)
 
-        +symbol(constructorSymbolType)
+        +symbol(constructorSymbolType, mutable = true)
     }
     val dynamicExpression: ElementConfig by element(Expression) {
         visitorParent = expression
@@ -923,7 +961,7 @@ object IrTree : AbstractTreeBuilder() {
 
         parent(functionAccessExpression)
 
-        +symbol(constructorSymbolType)
+        +symbol(constructorSymbolType, mutable = true)
     }
     val errorExpression: ElementConfig by element(Expression) {
         visitorParent = expression
@@ -948,7 +986,7 @@ object IrTree : AbstractTreeBuilder() {
 
         parent(declarationReference)
 
-        +symbol(fieldSymbolType)
+        +symbol(fieldSymbolType, mutable = true)
         +field("superQualifierSymbol", classSymbolType, nullable = true)
         +field("receiver", expression, nullable = true, isChild = true) {
             baseDefaultValue = code("null")
@@ -1093,7 +1131,7 @@ object IrTree : AbstractTreeBuilder() {
 
         parent(declarationReference)
 
-        +symbol(valueSymbolType)
+        +symbol(valueSymbolType, mutable = true)
         +field("origin", statementOriginType, nullable = true)
     }
     val getValue: ElementConfig by element(Expression) {
@@ -1106,7 +1144,6 @@ object IrTree : AbstractTreeBuilder() {
 
         parent(valueAccessExpression)
 
-        +symbol(valueSymbolType)
         +field("value", expression, isChild = true)
     }
     val varargElement: ElementConfig by element(Expression)

@@ -70,6 +70,7 @@ object StandardClassIds {
     val KFunction = "KFunction".reflectId()
     val KClass = "KClass".reflectId()
     val KCallable = "KCallable".reflectId()
+    val KType = "KType".reflectId()
 
     val Comparable = "Comparable".baseId()
     val Number = "Number".baseId()
@@ -155,6 +156,7 @@ object StandardClassIds {
 
         val HidesMembers = "HidesMembers".internalId()
         val DynamicExtension = "DynamicExtension".internalId()
+        val IntrinsicConstEvaluation = "IntrinsicConstEvaluation".internalId()
 
         val Retention = "Retention".annotationId()
         val Target = "Target".annotationId()
@@ -174,6 +176,7 @@ object StandardClassIds {
 
         val RawTypeAnnotation = "RawType".internalIrId()
         val FlexibleNullability = "FlexibleNullability".internalIrId()
+        val FlexibleMutability = "FlexibleMutability".internalIrId()
         val EnhancedNullability = "EnhancedNullability".jvmInternalId()
 
         val InlineOnly = "InlineOnly".internalId()

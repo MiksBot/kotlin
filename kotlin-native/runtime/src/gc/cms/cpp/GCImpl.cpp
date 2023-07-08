@@ -8,31 +8,16 @@
 #include "GC.hpp"
 #include "GCStatistics.hpp"
 #include "MarkAndSweepUtils.hpp"
+#include "ObjectOps.hpp"
 #include "ThreadSuspension.hpp"
 #include "std_support/Memory.hpp"
 
 using namespace kotlin;
 
-namespace {
-
-ALWAYS_INLINE void SafePointRegular(gc::GC::ThreadData& threadData, size_t weight) noexcept {
-    threadData.impl().gcScheduler().OnSafePointRegular(weight);
-    mm::SuspendIfRequested();
-}
-
-} // namespace
-
-gc::GC::ThreadData::ThreadData(GC& gc, mm::ThreadData& threadData) noexcept : impl_(std_support::make_unique<Impl>(gc, threadData)) {}
+gc::GC::ThreadData::ThreadData(GC& gc, gcScheduler::GCSchedulerThreadData& gcScheduler, mm::ThreadData& threadData) noexcept :
+    impl_(std_support::make_unique<Impl>(gc, gcScheduler, threadData)) {}
 
 gc::GC::ThreadData::~ThreadData() = default;
-
-ALWAYS_INLINE void gc::GC::ThreadData::SafePointFunctionPrologue() noexcept {
-    SafePointRegular(*this, GCSchedulerThreadData::kFunctionPrologueWeight);
-}
-
-ALWAYS_INLINE void gc::GC::ThreadData::SafePointLoopBody() noexcept {
-    SafePointRegular(*this, GCSchedulerThreadData::kLoopBodyWeight);
-}
 
 void gc::GC::ThreadData::Schedule() noexcept {
     impl_->gc().Schedule();
@@ -74,15 +59,15 @@ ALWAYS_INLINE ArrayHeader* gc::GC::ThreadData::CreateArray(const TypeInfo* typeI
 #endif
 }
 
-void gc::GC::ThreadData::OnStoppedForGC() noexcept {
-    impl_->gcScheduler().OnStoppedForGC();
-}
-
 void gc::GC::ThreadData::OnSuspendForGC() noexcept {
     impl_->gc().OnSuspendForGC();
 }
 
-gc::GC::GC() noexcept : impl_(std_support::make_unique<Impl>()) {}
+void gc::GC::ThreadData::safePoint() noexcept {
+    impl_->gc().safePoint();
+}
+
+gc::GC::GC(gcScheduler::GCScheduler& gcScheduler) noexcept : impl_(std_support::make_unique<Impl>(gcScheduler)) {}
 
 gc::GC::~GC() = default;
 
@@ -97,10 +82,6 @@ size_t gc::GC::GetAllocatedHeapSize(ObjHeader* object) noexcept {
 
 size_t gc::GC::GetTotalHeapObjectsSizeBytes() const noexcept {
     return allocatedBytes();
-}
-
-gc::GCSchedulerConfig& gc::GC::gcSchedulerConfig() noexcept {
-    return impl_->gcScheduler().config();
 }
 
 void gc::GC::ClearForTests() noexcept {
@@ -136,4 +117,21 @@ ALWAYS_INLINE void gc::GC::processArrayInMark(void* state, ArrayHeader* array) n
 // static
 ALWAYS_INLINE void gc::GC::processFieldInMark(void* state, ObjHeader* field) noexcept {
     gc::internal::processFieldInMark<gc::internal::MarkTraits>(state, field);
+}
+
+int64_t gc::GC::Schedule() noexcept {
+    return impl_->gc().Schedule();
+}
+
+void gc::GC::WaitFinalizers(int64_t epoch) noexcept {
+    impl_->gc().WaitFinalized(epoch);
+}
+
+bool gc::isMarked(ObjHeader* object) noexcept {
+    auto& objectData = mm::ObjectFactory<gc::ConcurrentMarkAndSweep>::NodeRef::From(object).ObjectData();
+    return objectData.marked();
+}
+
+ALWAYS_INLINE OBJ_GETTER(gc::tryRef, std::atomic<ObjHeader*>& object) noexcept {
+    RETURN_RESULT_OF(gc::WeakRefRead, object);
 }

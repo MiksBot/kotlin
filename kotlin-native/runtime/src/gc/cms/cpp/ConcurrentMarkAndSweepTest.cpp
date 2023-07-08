@@ -19,6 +19,7 @@
 #include "GlobalData.hpp"
 #include "ObjectOps.hpp"
 #include "ObjectTestSupport.hpp"
+#include "SafePoint.hpp"
 #include "SingleThreadExecutor.hpp"
 #include "TestSupport.hpp"
 #include "ThreadData.hpp"
@@ -727,18 +728,19 @@ TEST_P(ConcurrentMarkAndSweepTest, MultipleMutatorsCollect) {
                 .wait();
     }
 
-    std_support::vector<std::future<void>> gcFutures(kDefaultThreadCount);
+    std_support::vector<std::future<void>> gcFutures;
 
-    gcFutures[0] = mutators[0].Execute([](mm::ThreadData& threadData, Mutator& mutator) { threadData.gc().ScheduleAndWaitFullGCWithFinalizers(); });
-
-    // Spin until thread suspension is requested.
-    while (!mm::IsThreadSuspensionRequested()) {
+    std::atomic<bool> gcDone = false;
+    for (auto& mutator : mutators) {
+        gcFutures.emplace_back(mutator.Execute([&](mm::ThreadData& threadData, Mutator& mutator) noexcept {
+            while (!gcDone.load(std::memory_order_relaxed)) {
+                mm::safePoint(threadData);
+            }
+        }));
     }
 
-    for (int i = 1; i < kDefaultThreadCount; ++i) {
-        gcFutures[i] =
-                mutators[i].Execute([](mm::ThreadData& threadData, Mutator& mutator) { threadData.gc().SafePointFunctionPrologue(); });
-    }
+    mm::GlobalData::Instance().gc().ScheduleAndWaitFullGCWithFinalizers();
+    gcDone.store(true, std::memory_order_relaxed);
 
     for (auto& future : gcFutures) {
         future.wait();
@@ -783,15 +785,15 @@ TEST_P(ConcurrentMarkAndSweepTest, MultipleMutatorsAllCollect) {
                 .wait();
     }
 
-    std_support::vector<std::future<void>> gcFutures(kDefaultThreadCount);
+    std_support::vector<std::future<void>> gcFutures;
 
-    for (int i = 0; i < kDefaultThreadCount; ++i) {
-        gcFutures[i] = mutators[i].Execute([](mm::ThreadData& threadData, Mutator& mutator) {
+    for (auto& mutator : mutators) {
+        gcFutures.emplace_back(mutator.Execute([](mm::ThreadData& threadData, Mutator& mutator) {
             threadData.gc().ScheduleAndWaitFullGCWithFinalizers();
             // If GC starts before all thread executed line above, two gc will be run
-            // So we are temporary switch threads to native state and then return them back after all GC runs are done
+            // So we temporary switch threads to native state and then return them back after all GC runs are done
             SwitchThreadState(mm::GetMemoryState(), kotlin::ThreadState::kNative);
-        });
+        }));
     }
 
     for (auto& future : gcFutures) {
@@ -846,33 +848,32 @@ TEST_P(ConcurrentMarkAndSweepTest, MultipleMutatorsAddToRootSetAfterCollectionRe
         mutator.AddStackRoot(locals[i]);
     };
 
-    mutators[0]
-            .Execute([expandRootSet, allocateInHeap](mm::ThreadData& threadData, Mutator& mutator) {
-                allocateInHeap(threadData, mutator, 0);
-                expandRootSet(threadData, mutator, 0);
-            })
-            .wait();
-
     // Allocate everything in heap before scheduling the GC.
-    for (int i = 1; i < kDefaultThreadCount; ++i) {
+    for (int i = 0; i < kDefaultThreadCount; ++i) {
         mutators[i]
                 .Execute([allocateInHeap, i](mm::ThreadData& threadData, Mutator& mutator) { allocateInHeap(threadData, mutator, i); })
                 .wait();
     }
 
-    std_support::vector<std::future<void>> gcFutures(kDefaultThreadCount);
-    gcFutures[0] = mutators[0].Execute([](mm::ThreadData& threadData, Mutator& mutator) { threadData.gc().ScheduleAndWaitFullGCWithFinalizers(); });
+    std_support::vector<std::future<void>> gcFutures;
+    auto epoch = mm::GlobalData::Instance().gc().Schedule();
+    std::atomic<bool> gcDone = false;
 
     // Spin until thread suspension is requested.
     while (!mm::IsThreadSuspensionRequested()) {
     }
 
-    for (int i = 1; i < kDefaultThreadCount; ++i) {
-        gcFutures[i] = mutators[i].Execute([i, expandRootSet](mm::ThreadData& threadData, Mutator& mutator) {
+    for (int i = 0; i < kDefaultThreadCount; ++i) {
+        gcFutures.emplace_back(mutators[i].Execute([&gcDone, i, expandRootSet](mm::ThreadData& threadData, Mutator& mutator) {
             expandRootSet(threadData, mutator, i);
-            threadData.gc().SafePointFunctionPrologue();
-        });
+            while (!gcDone.load(std::memory_order_relaxed)) {
+                mm::safePoint(threadData);
+            }
+        }));
     }
+
+    mm::GlobalData::Instance().gc().WaitFinalizers(epoch);
+    gcDone.store(true, std::memory_order_relaxed);
 
     for (auto& future : gcFutures) {
         future.wait();
@@ -924,18 +925,19 @@ TEST_P(ConcurrentMarkAndSweepTest, CrossThreadReference) {
                 .wait();
     }
 
-    std_support::vector<std::future<void>> gcFutures(kDefaultThreadCount);
+    std_support::vector<std::future<void>> gcFutures;
 
-    gcFutures[0] = mutators[0].Execute([](mm::ThreadData& threadData, Mutator& mutator) { threadData.gc().ScheduleAndWaitFullGCWithFinalizers(); });
-
-    // Spin until thread suspension is requested.
-    while (!mm::IsThreadSuspensionRequested()) {
+    std::atomic<bool> gcDone = false;
+    for (auto& mutator : mutators) {
+        gcFutures.emplace_back(mutator.Execute([&](mm::ThreadData& threadData, Mutator& mutator) noexcept {
+            while (!gcDone.load(std::memory_order_relaxed)) {
+                mm::safePoint(threadData);
+            }
+        }));
     }
 
-    for (int i = 1; i < kDefaultThreadCount; ++i) {
-        gcFutures[i] =
-                mutators[i].Execute([](mm::ThreadData& threadData, Mutator& mutator) { threadData.gc().SafePointFunctionPrologue(); });
-    }
+    mm::GlobalData::Instance().gc().ScheduleAndWaitFullGCWithFinalizers();
+    gcDone.store(true, std::memory_order_relaxed);
 
     for (auto& future : gcFutures) {
         future.wait();
@@ -985,23 +987,25 @@ TEST_P(ConcurrentMarkAndSweepTest, MultipleMutatorsWeaks) {
         mutators[i].Execute([](mm::ThreadData& threadData, Mutator& mutator) {}).wait();
     }
 
-    std_support::vector<std::future<void>> gcFutures(kDefaultThreadCount);
-
-    gcFutures[0] = mutators[0].Execute([weak](mm::ThreadData& threadData, Mutator& mutator) {
-        threadData.gc().ScheduleAndWaitFullGCWithFinalizers();
-        EXPECT_THAT(weak->get(), nullptr);
-    });
+    std_support::vector<std::future<void>> gcFutures;
+    auto epoch = mm::GlobalData::Instance().gc().Schedule();
+    std::atomic<bool> gcDone = false;
 
     // Spin until thread suspension is requested.
     while (!mm::IsThreadSuspensionRequested()) {
     }
 
-    for (int i = 1; i < kDefaultThreadCount; ++i) {
-        gcFutures[i] = mutators[i].Execute([weak](mm::ThreadData& threadData, Mutator& mutator) {
-            threadData.gc().SafePointFunctionPrologue();
-            EXPECT_THAT(weak->get(), nullptr);
-        });
+    for (auto& mutator : mutators) {
+        gcFutures.emplace_back(mutator.Execute([&](mm::ThreadData& threadData, Mutator& mutator) noexcept {
+            while (!gcDone.load(std::memory_order_relaxed)) {
+                mm::safePoint(threadData);
+                EXPECT_THAT(weak->get(), nullptr);
+            }
+        }));
     }
+
+    mm::GlobalData::Instance().gc().WaitFinalizers(epoch);
+    gcDone.store(true, std::memory_order_relaxed);
 
     for (auto& future : gcFutures) {
         future.wait();
@@ -1037,9 +1041,9 @@ TEST_P(ConcurrentMarkAndSweepTest, NewThreadsWhileRequestingCollection) {
                 .wait();
     }
 
-    std_support::vector<std::future<void>> gcFutures(kDefaultThreadCount);
-
-    gcFutures[0] = mutators[0].Execute([](mm::ThreadData& threadData, Mutator& mutator) { threadData.gc().ScheduleAndWaitFullGCWithFinalizers(); });
+    std_support::vector<std::future<void>> gcFutures;
+    auto epoch = mm::GlobalData::Instance().gc().Schedule();
+    std::atomic<bool> gcDone = false;
 
     // Spin until thread suspension is requested.
     while (!mm::IsThreadSuspensionRequested()) {
@@ -1050,14 +1054,26 @@ TEST_P(ConcurrentMarkAndSweepTest, NewThreadsWhileRequestingCollection) {
     std_support::vector<std::future<void>> attachFutures(kDefaultThreadCount);
 
     for (int i = 0; i < kDefaultThreadCount; ++i) {
-        attachFutures[i] = newMutators[i].Execute([i, expandRootSet](mm::ThreadData& threadData, Mutator& mutator) { expandRootSet(threadData, mutator, i + kDefaultThreadCount); });
+        attachFutures[i] = newMutators[i].Execute([&gcDone, i, expandRootSet](mm::ThreadData& threadData, Mutator& mutator) {
+            expandRootSet(threadData, mutator, i + kDefaultThreadCount);
+            while (!gcDone.load(std::memory_order_relaxed)) {
+                mm::safePoint(threadData);
+            }
+        });
     }
 
     // All the other threads are stopping at safe points.
-    for (int i = 1; i < kDefaultThreadCount; ++i) {
-        gcFutures[i] =
-                mutators[i].Execute([](mm::ThreadData& threadData, Mutator& mutator) { threadData.gc().SafePointFunctionPrologue(); });
+    for (auto& mutator : mutators) {
+        gcFutures.emplace_back(mutator.Execute([&gcDone](mm::ThreadData& threadData, Mutator& mutator) {
+            while (!gcDone.load(std::memory_order_relaxed)) {
+                mm::safePoint(threadData);
+            }
+        }));
     }
+
+    // Wait for the GC to be done.
+    mm::GlobalData::Instance().gc().WaitFinalizers(epoch);
+    gcDone.store(true, std::memory_order_relaxed);
 
     // GC will be completed first
     for (auto& future : gcFutures) {
@@ -1129,7 +1145,7 @@ TEST_P(ConcurrentMarkAndSweepTest, FreeObjectWithFreeWeakReversedOrder) {
         auto& weak_local = InstallWeakReference(threadData, object1.load()->header(), holder.slot());
         weak = &weak_local;
         *holder.slot() = nullptr;
-        while (!done) threadData.gc().SafePointLoopBody();
+        while (!done) mm::safePoint(threadData);
     });
 
     f0.wait();

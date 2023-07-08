@@ -29,7 +29,7 @@ object AbstractExpectActualCompatibilityChecker {
         context: ExpectActualMatchingContext<T>,
     ): ExpectActualCompatibility<T> {
         val result = with(context) {
-            areCompatibleClassifiers(expectClassSymbol, actualClassLikeSymbol)
+            areCompatibleClassifiers(expectClassSymbol, actualClassLikeSymbol, parentSubstitutor = null)
         }
         @Suppress("UNCHECKED_CAST")
         return result as ExpectActualCompatibility<T>
@@ -50,11 +50,29 @@ object AbstractExpectActualCompatibilityChecker {
         return result as ExpectActualCompatibility<T>
     }
 
+    fun <T : DeclarationSymbolMarker> matchSingleExpectTopLevelDeclarationAgainstPotentialActuals(
+        expectDeclaration: DeclarationSymbolMarker,
+        actualDeclarations: List<DeclarationSymbolMarker>,
+        context: ExpectActualMatchingContext<T>,
+    ) {
+        with(context) {
+            matchSingleExpectAgainstPotentialActuals(
+                expectDeclaration,
+                actualDeclarations,
+                substitutor = null,
+                expectClassSymbol = null,
+                actualClassSymbol = null,
+                unfulfilled = null
+            )
+        }
+    }
+
     context(ExpectActualMatchingContext<*>)
     @Suppress("warnings")
     private fun areCompatibleClassifiers(
         expectClassSymbol: RegularClassSymbolMarker,
         actualClassLikeSymbol: ClassLikeSymbolMarker,
+        parentSubstitutor: TypeSubstitutorMarker?
     ): ExpectActualCompatibility<*> {
         // Can't check FQ names here because nested expected class may be implemented via actual typealias's expansion with the other FQ name
         require(expectClassSymbol.name == actualClassLikeSymbol.name) {
@@ -88,14 +106,14 @@ object AbstractExpectActualCompatibilityChecker {
             return Incompatible.Modality
         }
 
-        if (expectClassSymbol.visibility != actualClass.visibility) {
+        if (!areCompatibleClassVisibilities(expectClassSymbol, actualClass)) {
             return Incompatible.Visibility
         }
 
         val substitutor = createExpectActualTypeParameterSubstitutor(
             expectTypeParameterSymbols,
             actualTypeParameterSymbols,
-            parentSubstitutor = null
+            parentSubstitutor
         )
 
         areCompatibleTypeParameters(expectTypeParameterSymbols, actualTypeParameterSymbols, substitutor).let {
@@ -104,17 +122,7 @@ object AbstractExpectActualCompatibilityChecker {
             }
         }
 
-        // Subtract kotlin.Any from supertypes because it's implicitly added if no explicit supertype is specified,
-        // and not added if an explicit supertype _is_ specified
-        val expectSupertypes = expectClassSymbol.superTypes.filterNot { it.typeConstructor().isAnyConstructor() }
-        val actualSupertypes = actualClass.superTypes.filterNot { it.typeConstructor().isAnyConstructor() }
-        if (
-            expectSupertypes.map { substitutor.safeSubstitute(it) }.any { expectSupertype ->
-                actualSupertypes.none { actualSupertype ->
-                    areCompatibleExpectActualTypes(expectSupertype, actualSupertype)
-                }
-            }
-        ) {
+        if (!areCompatibleSupertypes(expectClassSymbol, actualClass, substitutor)) {
             return Incompatible.Supertypes
         }
 
@@ -128,12 +136,58 @@ object AbstractExpectActualCompatibilityChecker {
     }
 
     context(ExpectActualMatchingContext<*>)
+    private fun areCompatibleSupertypes(
+        expectClassSymbol: RegularClassSymbolMarker,
+        actualClassSymbol: RegularClassSymbolMarker,
+        substitutor: TypeSubstitutorMarker,
+    ): Boolean {
+        return when (allowTransitiveSupertypesActualization) {
+            false -> areCompatibleSupertypesOneByOne(expectClassSymbol, actualClassSymbol, substitutor)
+            true -> areCompatibleSupertypesTransitive(expectClassSymbol, actualClassSymbol, substitutor)
+        }
+    }
+
+    context(ExpectActualMatchingContext<*>)
+    private fun areCompatibleSupertypesOneByOne(
+        expectClassSymbol: RegularClassSymbolMarker,
+        actualClassSymbol: RegularClassSymbolMarker,
+        substitutor: TypeSubstitutorMarker,
+    ): Boolean {
+        // Subtract kotlin.Any from supertypes because it's implicitly added if no explicit supertype is specified,
+        // and not added if an explicit supertype _is_ specified
+        val expectSupertypes = expectClassSymbol.superTypes.filterNot { it.typeConstructor().isAnyConstructor() }
+        val actualSupertypes = actualClassSymbol.superTypes.filterNot { it.typeConstructor().isAnyConstructor() }
+        return expectSupertypes.all { expectSupertype ->
+            val substitutedExpectType = substitutor.safeSubstitute(expectSupertype)
+            actualSupertypes.any { actualSupertype ->
+                areCompatibleExpectActualTypes(substitutedExpectType, actualSupertype)
+            }
+        }
+    }
+
+    context(ExpectActualMatchingContext<*>)
+    private fun areCompatibleSupertypesTransitive(
+        expectClassSymbol: RegularClassSymbolMarker,
+        actualClassSymbol: RegularClassSymbolMarker,
+        substitutor: TypeSubstitutorMarker,
+    ): Boolean {
+        val expectSupertypes = expectClassSymbol.superTypes.filterNot { it.typeConstructor().isAnyConstructor() }
+        val actualType = actualClassSymbol.defaultType
+        return expectSupertypes.all { expectSupertype ->
+            actualTypeIsSubtypeOfExpectType(
+                expectType = substitutor.safeSubstitute(expectSupertype),
+                actualType = actualType
+            )
+        }
+    }
+
+    context(ExpectActualMatchingContext<*>)
     private fun areCompatibleClassScopes(
         expectClassSymbol: RegularClassSymbolMarker,
         actualClassSymbol: RegularClassSymbolMarker,
         substitutor: TypeSubstitutorMarker,
     ): ExpectActualCompatibility<*> {
-        val unfulfilled = arrayListOf<Pair<Any?, Map<Incompatible<Any?>, MutableCollection<Any?>>>>()
+        val unfulfilled = arrayListOf<Pair<DeclarationSymbolMarker, Map<Incompatible<*>, List<DeclarationSymbolMarker?>>>>()
 
         val actualMembersByName = actualClassSymbol.collectAllMembers(isActualDeclaration = true).groupBy { it.name }
 
@@ -145,31 +199,14 @@ object AbstractExpectActualCompatibilityChecker {
                         expectMember is RegularClassSymbolMarker && actualMember is RegularClassSymbolMarker
             }.orEmpty()
 
-            val mapping = actualMembers.keysToMap { actualMember ->
-                when (expectMember) {
-                    is CallableSymbolMarker -> areCompatibleCallables(
-                        expectMember,
-                        actualMember as CallableSymbolMarker,
-                        substitutor,
-                        expectClassSymbol,
-                        actualClassSymbol
-                    )
-
-                    is RegularClassSymbolMarker -> areCompatibleClassifiers(expectMember, actualMember as RegularClassSymbolMarker)
-                    else -> error("Unsupported declaration: $expectMember ($actualMembers)")
-                }
-            }
-            if (mapping.values.any { it == ExpectActualCompatibility.Compatible }) continue
-
-            val incompatibilityMap = mutableMapOf<Incompatible<Any?>, MutableCollection<Any?>>()
-            for ((declaration, compatibility) in mapping) {
-                when (compatibility) {
-                    ExpectActualCompatibility.Compatible -> continue@outer
-                    is Incompatible -> incompatibilityMap.getOrPut(compatibility) { SmartList() }.add(declaration)
-                }
-            }
-
-            unfulfilled.add(expectMember to incompatibilityMap)
+            matchSingleExpectAgainstPotentialActuals(
+                expectMember,
+                actualMembers,
+                substitutor,
+                expectClassSymbol,
+                actualClassSymbol,
+                unfulfilled
+            )
         }
 
         if (expectClassSymbol.classKind == ClassKind.ENUM_CLASS) {
@@ -184,6 +221,53 @@ object AbstractExpectActualCompatibilityChecker {
         if (unfulfilled.isEmpty()) return ExpectActualCompatibility.Compatible
 
         return Incompatible.ClassScopes(unfulfilled)
+    }
+
+    context(ExpectActualMatchingContext<*>)
+    private fun matchSingleExpectAgainstPotentialActuals(
+        expectMember: DeclarationSymbolMarker,
+        actualMembers: List<DeclarationSymbolMarker>,
+        substitutor: TypeSubstitutorMarker?,
+        expectClassSymbol: RegularClassSymbolMarker?,
+        actualClassSymbol: RegularClassSymbolMarker?,
+        unfulfilled: MutableList<Pair<DeclarationSymbolMarker, Map<Incompatible<*>, List<DeclarationSymbolMarker?>>>>?
+    ) {
+        val mapping = actualMembers.keysToMap { actualMember ->
+            when (expectMember) {
+                is CallableSymbolMarker -> areCompatibleCallables(
+                    expectMember,
+                    actualMember as CallableSymbolMarker,
+                    substitutor,
+                    expectClassSymbol,
+                    actualClassSymbol
+                )
+
+                is RegularClassSymbolMarker -> {
+                    val parentSubstitutor = substitutor?.takeIf { !innerClassesCapturesOuterTypeParameters }
+                    areCompatibleClassifiers(
+                        expectMember,
+                        actualMember as ClassLikeSymbolMarker,
+                        parentSubstitutor
+                    )
+                }
+                else -> error("Unsupported declaration: $expectMember ($actualMembers)")
+            }
+        }
+
+        val incompatibilityMap = mutableMapOf<Incompatible<*>, MutableList<DeclarationSymbolMarker>>()
+        for ((actualMember, compatibility) in mapping) {
+            when (compatibility) {
+                ExpectActualCompatibility.Compatible -> {
+                    onMatchedMembers(expectMember, actualMember)
+                    return
+                }
+
+                is Incompatible -> incompatibilityMap.getOrPut(compatibility) { SmartList() }.add(actualMember)
+            }
+        }
+
+        unfulfilled?.add(expectMember to incompatibilityMap)
+        onMismatchedMembersFromClassScope(expectMember, incompatibilityMap)
     }
 
     context(ExpectActualMatchingContext<*>)
@@ -206,6 +290,16 @@ object AbstractExpectActualCompatibilityChecker {
 
         if (expectDeclaration is FunctionSymbolMarker != actualDeclaration is FunctionSymbolMarker) {
             return Incompatible.CallableKind
+        }
+
+        if (
+            enumConstructorsAreAlwaysCompatible &&
+            expectContainingClass?.classKind == ClassKind.ENUM_CLASS &&
+            actualContainingClass?.classKind == ClassKind.ENUM_CLASS &&
+            expectDeclaration is ConstructorSymbolMarker &&
+            actualDeclaration is ConstructorSymbolMarker
+        ) {
+            return ExpectActualCompatibility.Compatible
         }
 
         val expectedReceiverType = expectDeclaration.extensionReceiverType
@@ -272,7 +366,7 @@ object AbstractExpectActualCompatibilityChecker {
             return Incompatible.Modality
         }
 
-        if (!areDeclarationsWithCompatibleVisibilities(expectDeclaration.visibility, expectModality, actualDeclaration.visibility)) {
+        if (!areCompatibleCallableVisibilities(expectDeclaration.visibility, expectModality, actualDeclaration.visibility)) {
             return Incompatible.Visibility
         }
 
@@ -306,6 +400,10 @@ object AbstractExpectActualCompatibilityChecker {
                 expectDeclaration,
                 actualDeclaration
             ).let { if (it != ExpectActualCompatibility.Compatible) return it }
+
+            expectDeclaration is EnumEntrySymbolMarker && actualDeclaration is EnumEntrySymbolMarker -> {
+                // do nothing, entries are matched only by name
+            }
 
             else -> error("Unsupported declarations: $expectDeclaration, $actualDeclaration")
         }
@@ -374,7 +472,7 @@ object AbstractExpectActualCompatibilityChecker {
         Modality.SEALED to enumSetOf(Modality.SEALED),
     )
 
-    private fun areDeclarationsWithCompatibleVisibilities(
+    private fun areCompatibleCallableVisibilities(
         expectVisibility: Visibility,
         expectModality: Modality?,
         actualVisibility: Visibility,
@@ -387,6 +485,19 @@ object AbstractExpectActualCompatibilityChecker {
             // For non-overridable declarations actuals are allowed to have more permissive visibility
             compare != null && compare <= 0
         }
+    }
+
+    context(ExpectActualMatchingContext<*>)
+    private fun areCompatibleClassVisibilities(
+        expectClassSymbol: RegularClassSymbolMarker,
+        actualClassSymbol: RegularClassSymbolMarker,
+    ): Boolean {
+        val expectVisibility = expectClassSymbol.visibility
+        val actualVisibility = actualClassSymbol.visibility
+        if (expectVisibility == actualVisibility) return true
+        if (!allowClassActualizationWithWiderVisibility) return false
+        val result = Visibilities.compare(actualVisibility, expectVisibility)
+        return result != null && result > 0
     }
 
     context(ExpectActualMatchingContext<*>)
@@ -432,11 +543,9 @@ object AbstractExpectActualCompatibilityChecker {
         }
 
         if (
-            expectFunction.isExternal && !actualFunction.isExternal ||
             expectFunction.isInfix && !actualFunction.isInfix ||
             expectFunction.isInline && !actualFunction.isInline ||
-            expectFunction.isOperator && !actualFunction.isOperator ||
-            expectFunction.isTailrec && !actualFunction.isTailrec
+            expectFunction.isOperator && !actualFunction.isOperator
         ) {
             return Incompatible.FunctionModifiersNotSubset
         }
@@ -465,7 +574,7 @@ object AbstractExpectActualCompatibilityChecker {
     ): Boolean {
         val expectedSetter = expected.setter ?: return true
         val actualSetter = actual.setter ?: return true
-        return areDeclarationsWithCompatibleVisibilities(expectedSetter.visibility, expectedSetter.modality, actualSetter.visibility)
+        return areCompatibleCallableVisibilities(expectedSetter.visibility, expectedSetter.modality, actualSetter.visibility)
     }
 
     // ---------------------------------------- Utils ----------------------------------------

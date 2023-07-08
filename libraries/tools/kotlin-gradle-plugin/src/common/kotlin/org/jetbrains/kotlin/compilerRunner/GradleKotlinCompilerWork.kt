@@ -16,6 +16,7 @@ import org.jetbrains.kotlin.gradle.logging.*
 import org.jetbrains.kotlin.gradle.plugin.internal.state.TaskExecutionResults
 import org.jetbrains.kotlin.gradle.plugin.internal.state.TaskLoggers
 import org.jetbrains.kotlin.build.report.statistics.StatTag
+import org.jetbrains.kotlin.buildtools.api.KotlinLogger
 import org.jetbrains.kotlin.gradle.report.*
 import org.jetbrains.kotlin.gradle.tasks.*
 import org.jetbrains.kotlin.gradle.tasks.OOMErrorException
@@ -249,11 +250,13 @@ internal class GradleKotlinCompilerWork @Inject constructor(
             bufferingMessageCollector.flush(messageCollector)
             if (e is OutOfMemoryError || e.hasOOMCause()) {
                 throw OOMErrorException(kotlinDaemonOOMHelperMessage)
+            } else if (e is RemoteException) {
+                throw DaemonCrashedException(e)
             } else {
                 throw e
             }
         } finally {
-            val memoryUsageAfterBuild = daemon.getUsedMemory(withGC = false).takeIf { it.isGood }?.get()
+            val memoryUsageAfterBuild = runCatching { daemon.getUsedMemory(withGC = false).takeIf { it.isGood }?.get() }.getOrNull()
 
             if (memoryUsageAfterBuild == null || memoryUsageBeforeBuild == null) {
                 log.debug("Unable to calculate memory usage")

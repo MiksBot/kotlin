@@ -6,16 +6,15 @@
 package org.jetbrains.kotlin.analysis.low.level.api.fir
 
 import org.jetbrains.kotlin.analysis.low.level.api.fir.api.getOrBuildFir
+import org.jetbrains.kotlin.analysis.low.level.api.fir.api.getOrBuildFirFile
 import org.jetbrains.kotlin.analysis.low.level.api.fir.test.base.AbstractLowLevelApiSingleFileTest
 import org.jetbrains.kotlin.analysis.low.level.api.fir.test.configurators.AnalysisApiFirOutOfContentRootTestConfigurator
 import org.jetbrains.kotlin.analysis.low.level.api.fir.test.configurators.AnalysisApiFirSourceTestConfigurator
 import org.jetbrains.kotlin.analysis.test.framework.services.expressionMarkerProvider
 import org.jetbrains.kotlin.fir.FirElement
+import org.jetbrains.kotlin.fir.declarations.FirFile
 import org.jetbrains.kotlin.fir.declarations.FirImport
-import org.jetbrains.kotlin.fir.renderer.FirFileAnnotationsContainerRenderer
-import org.jetbrains.kotlin.fir.renderer.FirPackageDirectiveRenderer
-import org.jetbrains.kotlin.fir.renderer.FirRenderer
-import org.jetbrains.kotlin.fir.renderer.FirResolvePhaseRenderer
+import org.jetbrains.kotlin.fir.renderer.*
 import org.jetbrains.kotlin.psi.KtElement
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.test.services.TestModuleStructure
@@ -23,32 +22,44 @@ import org.jetbrains.kotlin.test.services.TestServices
 import org.jetbrains.kotlin.test.services.assertions
 
 abstract class AbstractGetOrBuildFirTest : AbstractLowLevelApiSingleFileTest() {
-
     override fun doTestByFileStructure(ktFile: KtFile, moduleStructure: TestModuleStructure, testServices: TestServices) {
         val module = moduleStructure.modules.single()
         val selectedElement = testServices.expressionMarkerProvider.getSelectedElementOfTypeByDirective(ktFile, module) as KtElement
 
-        val actual = resolveWithClearCaches(ktFile) { state ->
-            val fir = selectedElement.getOrBuildFir(state)
-            """|KT element: ${selectedElement::class.simpleName}
-               |FIR element: ${fir?.let { it::class.simpleName }}
-               |FIR source kind: ${fir?.source?.kind?.let { it::class.simpleName }}
-               |
-               |FIR element rendered:
-               |${render(fir).trimEnd()}""".trimMargin()
+        val actual = resolveWithClearCaches(ktFile) { session ->
+            renderActualFir(
+                fir = selectedElement.getOrBuildFir(session),
+                ktElement = selectedElement,
+                firFile = ktFile.getOrBuildFirFile(session),
+            )
         }
+
         testServices.assertions.assertEqualsToTestDataFileSibling(actual)
     }
+}
 
-    private fun render(firElement: FirElement?): String = when (firElement) {
-        null -> "null"
-        is FirImport -> "import ${firElement.importedFqName}"
-        else -> FirRenderer(
-            fileAnnotationsContainerRenderer = FirFileAnnotationsContainerRenderer(),
-            packageDirectiveRenderer = FirPackageDirectiveRenderer(),
-            resolvePhaseRenderer = FirResolvePhaseRenderer(),
-        ).renderElementAsString(firElement)
-    }
+fun renderActualFir(
+    fir: FirElement?,
+    ktElement: KtElement,
+    renderKtText: Boolean = false,
+    firFile: FirFile? = null,
+): String = """
+       |KT element: ${ktElement::class.simpleName}${if (renderKtText) "\nKT element text:\n" + ktElement.text else ""}
+       |FIR element: ${fir?.let { it::class.simpleName }}
+       |FIR source kind: ${fir?.source?.kind?.let { it::class.simpleName }}
+       |
+       |FIR element rendered:
+       |${render(fir).trimEnd()}${if (firFile != null) "\n\nFIR FILE:\n${render(firFile).trimEnd()}" else ""}""".trimMargin()
+
+private fun render(firElement: FirElement?): String = when (firElement) {
+    null -> "null"
+    is FirImport -> "import ${firElement.importedFqName}"
+    else -> FirRenderer(
+        fileAnnotationsContainerRenderer = FirFileAnnotationsContainerRenderer(),
+        packageDirectiveRenderer = FirPackageDirectiveRenderer(),
+        resolvePhaseRenderer = FirResolvePhaseRenderer(),
+        declarationRenderer = FirDeclarationRendererWithFilteredAttributes(),
+    ).renderElementAsString(firElement)
 }
 
 abstract class AbstractSourceGetOrBuildFirTest : AbstractGetOrBuildFirTest() {

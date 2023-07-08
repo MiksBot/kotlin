@@ -139,7 +139,7 @@ private fun compileImpl(
         messageCollector
     )
 
-    checkKotlinPackageUsage(context.environment.configuration, sourceFiles, messageCollector)
+    checkKotlinPackageUsageForPsi(context.environment.configuration, sourceFiles, messageCollector)
 
     if (messageCollector.hasErrors() || sourceDependencies.any { it.sourceDependencies is ResultWithDiagnostics.Failure }) {
         return failure(messageCollector)
@@ -357,7 +357,7 @@ private fun doCompileWithK2(
         friendPaths = emptyList()
     )
     val session = prepareJvmSessions(
-        sourceFiles, kotlinCompilerConfiguration, projectEnvironment, Name.identifier(rootModuleName), extensionRegistrars,
+        sourceFiles, kotlinCompilerConfiguration, projectEnvironment, Name.special("<$rootModuleName>"), extensionRegistrars,
         librariesScope, libraryList, isCommonSourceForPsi, fileBelongsToModuleForPsi,
         createProviderAndScopeForIncrementalCompilation = { files ->
             createContextForIncrementalCompilation(

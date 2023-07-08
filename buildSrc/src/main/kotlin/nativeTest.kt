@@ -18,10 +18,10 @@ private enum class TestProperty(shortName: String) {
     FORCE_STANDALONE("forceStandalone"),
     COMPILE_ONLY("compileOnly"),
     OPTIMIZATION_MODE("optimizationMode"),
-    MEMORY_MODEL("memoryModel"),
     USE_THREAD_STATE_CHECKER("useThreadStateChecker"),
     GC_TYPE("gcType"),
     GC_SCHEDULER("gcScheduler"),
+    ALLOCATOR("alloc"),
     CACHE_MODE("cacheMode"),
     EXECUTION_TIMEOUT("executionTimeout"),
     SANITIZER("sanitizer"),
@@ -166,10 +166,10 @@ fun Project.nativeTest(
             compute(FORCE_STANDALONE)
             compute(COMPILE_ONLY)
             compute(OPTIMIZATION_MODE)
-            compute(MEMORY_MODEL)
             compute(USE_THREAD_STATE_CHECKER)
             compute(GC_TYPE)
             compute(GC_SCHEDULER)
+            compute(ALLOCATOR)
             compute(CACHE_MODE)
             compute(EXECUTION_TIMEOUT)
             compute(SANITIZER)

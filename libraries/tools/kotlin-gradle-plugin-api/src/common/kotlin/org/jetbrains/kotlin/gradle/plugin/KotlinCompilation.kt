@@ -9,7 +9,6 @@ package org.jetbrains.kotlin.gradle.plugin
 
 import org.gradle.api.Action
 import org.gradle.api.Named
-import org.gradle.api.Project
 import org.gradle.api.attributes.AttributeContainer
 import org.gradle.api.attributes.HasAttributes
 import org.gradle.api.file.FileCollection
@@ -17,7 +16,6 @@ import org.gradle.api.file.SourceDirectorySet
 import org.gradle.api.tasks.TaskProvider
 import org.jetbrains.kotlin.gradle.dsl.KotlinCommonOptionsDeprecated
 import org.jetbrains.kotlin.gradle.dsl.KotlinCompileDeprecated
-import org.jetbrains.kotlin.gradle.dsl.KotlinTargetHierarchyDsl
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask
 import org.jetbrains.kotlin.tooling.core.HasMutableExtras
 
@@ -142,11 +140,6 @@ interface KotlinCompilation<out T : KotlinCommonOptionsDeprecated> : Named,
 
     override fun getName(): String = compilationName
 
-    @Deprecated("Scheduled for removal with Kotlin 2.0")
-    @Suppress("DEPRECATION")
-    override val relatedConfigurationNames: List<String>
-        get() = super.relatedConfigurationNames + compileDependencyConfigurationName
-
     val disambiguatedName
         get() = target.disambiguationClassifier + name
 }
@@ -156,11 +149,6 @@ interface KotlinCompilationToRunnableFiles<T : KotlinCommonOptionsDeprecated> : 
     override val runtimeDependencyConfigurationName: String
 
     override var runtimeDependencyFiles: FileCollection
-
-    @Suppress("DEPRECATION")
-    @Deprecated("Scheduled for removal with Kotlin 2.0")
-    override val relatedConfigurationNames: List<String>
-        get() = super.relatedConfigurationNames + runtimeDependencyConfigurationName
 }
 
 @Deprecated("Scheduled for removal with Kotlin 2.0")

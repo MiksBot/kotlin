@@ -10,6 +10,7 @@ import org.jetbrains.kotlin.builtins.StandardNames
 import org.jetbrains.kotlin.config.LanguageFeature
 import org.jetbrains.kotlin.fir.backend.*
 import org.jetbrains.kotlin.fir.declarations.*
+import org.jetbrains.kotlin.fir.declarations.utils.isMethodOfAny
 import org.jetbrains.kotlin.fir.expressions.*
 import org.jetbrains.kotlin.fir.expressions.builder.buildAnnotationCall
 import org.jetbrains.kotlin.fir.expressions.impl.FirNoReceiverExpression
@@ -40,7 +41,6 @@ import org.jetbrains.kotlin.ir.types.*
 import org.jetbrains.kotlin.ir.util.dump
 import org.jetbrains.kotlin.ir.util.isFunctionTypeOrSubtype
 import org.jetbrains.kotlin.ir.util.isInterface
-import org.jetbrains.kotlin.ir.util.isMethodOfAny
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.resolve.calls.NewCommonSuperTypeCalculator.commonSuperType
 import org.jetbrains.kotlin.util.OperatorNameConventions
@@ -399,10 +399,17 @@ class CallAndReferenceGenerator(
                 when (symbol) {
                     is IrConstructorSymbol -> IrConstructorCallImpl.fromSymbolOwner(startOffset, endOffset, type, symbol)
                     is IrSimpleFunctionSymbol -> {
+                        require(firSymbol is FirCallableSymbol<*>) { "Illegal symbol: ${firSymbol!!::class}" }
+                        val valueParametersNumber = when (firSymbol) {
+                            is FirSyntheticPropertySymbol -> 0
+                            is FirNamedFunctionSymbol -> firSymbol.valueParameterSymbols.size + firSymbol.resolvedContextReceivers.size
+                            is FirFunctionSymbol<*> -> firSymbol.valueParameterSymbols.size
+                            else -> error("Illegal symbol: ${firSymbol::class}")
+                        }
                         IrCallImpl(
                             startOffset, endOffset, type, symbol,
-                            typeArgumentsCount = symbol.owner.typeParameters.size,
-                            valueArgumentsCount = symbol.owner.valueParameters.size,
+                            typeArgumentsCount = firSymbol.typeParameterSymbols.size,
+                            valueArgumentsCount = valueParametersNumber,
                             origin = calleeReference.statementOrigin(),
                             superQualifierSymbol = dispatchReceiver.superQualifierSymbol()
                         )
@@ -645,55 +652,52 @@ class CallAndReferenceGenerator(
         val type = coneType?.toIrType()
         val symbol = type?.classifierOrNull
         val irConstructorCall = annotation.convertWithOffsets { startOffset, endOffset ->
-            when (symbol) {
-                is IrClassSymbol -> {
-                    val irClass = symbol.owner
-                    val irConstructor = (annotation.toResolvedCallableSymbol() as? FirConstructorSymbol)?.let {
-                        this.declarationStorage.getIrConstructorSymbol(it)
-                    } ?: run {
-                        // Fallback for FirReferencePlaceholderForResolvedAnnotations from jar
-                        val fir = coneType.lookupTag.toSymbol(session)?.fir as? FirClass
-                        var constructorSymbol: FirConstructorSymbol? = null
-                        fir?.unsubstitutedScope(
-                            session,
-                            scopeSession,
-                            withForcedTypeCalculator = true,
-                            memberRequiredPhase = null,
-                        )?.processDeclaredConstructors {
-                            if (it.fir.isPrimary && constructorSymbol == null) {
-                                constructorSymbol = it
-                            }
-                        }
-
-                        constructorSymbol?.let {
-                            this.declarationStorage.getIrConstructorSymbol(it)
-                        }
-                    }
-                    if (irConstructor == null) {
-                        IrErrorCallExpressionImpl(startOffset, endOffset, type, "No annotation constructor found: ${irClass.name}")
-                    } else {
-                        IrConstructorCallImpl(
-                            startOffset, endOffset, type, irConstructor,
-                            valueArgumentsCount = irConstructor.owner.valueParameters.size,
-                            typeArgumentsCount = 0,
-                            constructorTypeArgumentsCount = 0
-                        )
-                    }
-
-                }
-
-                else -> {
-                    IrErrorCallExpressionImpl(
-                        startOffset,
-                        endOffset,
-                        type ?: createErrorType(),
-                        "Unresolved reference: ${annotation.render()}"
-                    )
-                }
+            if (symbol !is IrClassSymbol) {
+                return@convertWithOffsets IrErrorCallExpressionImpl(
+                    startOffset, endOffset, type ?: createErrorType(), "Unresolved reference: ${annotation.render()}"
+                )
             }
+
+            val irClass = symbol.owner
+            val firConstructorSymbol = annotation.toResolvedCallableSymbol() as? FirConstructorSymbol
+                ?: run {
+                    // Fallback for FirReferencePlaceholderForResolvedAnnotations from jar
+                    val fir = coneType.lookupTag.toSymbol(session)?.fir as? FirClass
+                    var constructorSymbol: FirConstructorSymbol? = null
+                    fir?.unsubstitutedScope(
+                        session,
+                        scopeSession,
+                        withForcedTypeCalculator = true,
+                        memberRequiredPhase = null,
+                    )?.processDeclaredConstructors {
+                        if (it.fir.isPrimary && constructorSymbol == null) {
+                            constructorSymbol = it
+                        }
+                    }
+                    constructorSymbol
+                } ?: return@convertWithOffsets IrErrorCallExpressionImpl(
+                    startOffset, endOffset, type, "No annotation constructor found: ${irClass.name}"
+                )
+
+            val irConstructor = declarationStorage.getIrConstructorSymbol(firConstructorSymbol)
+
+            IrConstructorCallImpl(
+                startOffset, endOffset, type, irConstructor,
+                // Get the number of value arguments from FIR because of a possible cycle where an annotation constructor
+                // parameter is annotated with the same annotation.
+                // In this case, the IR value parameters won't be initialized yet, and we will get 0 from
+                // `irConstructor.owner.valueParameters.size`.
+                // See KT-58294
+                valueArgumentsCount = firConstructorSymbol.valueParameterSymbols.size,
+                typeArgumentsCount = annotation.typeArguments.size,
+                constructorTypeArgumentsCount = 0
+            )
         }
         return visitor.withAnnotationMode {
-            irConstructorCall.applyCallArguments(annotation.toAnnotationCall())
+            val annotationCall = annotation.toAnnotationCall()
+            irConstructorCall
+                .applyCallArguments(annotationCall)
+                .applyTypeArguments(annotationCall?.typeArguments, null)
         }
     }
 
@@ -1050,11 +1054,22 @@ class CallAndReferenceGenerator(
     }
 
     internal fun IrExpression.applyTypeArguments(access: FirQualifiedAccessExpression): IrExpression {
+        return applyTypeArguments(
+            access.typeArguments,
+            (access.calleeReference.toResolvedCallableSymbol()?.fir as? FirTypeParametersOwner)?.typeParameters
+        )
+    }
+
+    private fun IrExpression.applyTypeArguments(
+        typeArguments: List<FirTypeProjection>?,
+        typeParameters: List<FirTypeParameter>?,
+    ): IrExpression {
         if (this !is IrMemberAccessExpression<*>) return this
-        val argumentsCount = access.typeArguments.size
+
+        val argumentsCount = typeArguments?.size ?: return this
         if (argumentsCount <= typeArgumentsCount) {
-            for ((index, argument) in access.typeArguments.withIndex()) {
-                val typeParameter = access.findTypeParameter(index)
+            for ((index, argument) in typeArguments.withIndex()) {
+                val typeParameter = typeParameters?.get(index)
                 val argumentFirType = (argument as FirTypeProjectionWithVariance).typeRef
                 val argumentIrType = if (typeParameter?.isReified == true) {
                     argumentFirType.approximateDeclarationType(
@@ -1078,9 +1093,6 @@ class CallAndReferenceGenerator(
         }
     }
 
-    private fun FirQualifiedAccessExpression.findTypeParameter(index: Int): FirTypeParameter? =
-        ((calleeReference as? FirResolvedNamedReference)?.resolvedSymbol?.fir as? FirTypeParametersOwner)?.typeParameters?.get(index)
-
     private fun FirQualifiedAccessExpression.findIrDispatchReceiver(explicitReceiverExpression: IrExpression?): IrExpression? =
         findIrReceiver(explicitReceiverExpression, isDispatch = true)
 
@@ -1099,11 +1111,6 @@ class CallAndReferenceGenerator(
         return firReceiver.takeIf { it !is FirNoReceiverExpression }
             ?.let { visitor.convertToIrReceiverExpression(it, calleeReference, this as? FirCallableReferenceAccess) }
             ?: explicitReceiverExpression
-            ?: run {
-                if (this is FirCallableReferenceAccess) return null
-                val name = if (isDispatch) "Dispatch" else "Extension"
-                error("$name receiver expected: ${render()} to ${calleeReference.render()}")
-            }
     }
 
     private fun IrExpression.applyReceivers(
@@ -1112,13 +1119,11 @@ class CallAndReferenceGenerator(
     ): IrExpression {
         when (this) {
             is IrMemberAccessExpression<*> -> {
-                val ownerFunction =
-                    symbol.owner as? IrFunction
-                        ?: (symbol.owner as? IrProperty)?.getter
-                if (ownerFunction?.dispatchReceiverParameter != null) {
+                val resolvedFirSymbol = qualifiedAccess.toResolvedCallableSymbol()
+                if (resolvedFirSymbol?.dispatchReceiverType != null) {
                     val baseDispatchReceiver = qualifiedAccess.findIrDispatchReceiver(explicitReceiverExpression)
                     dispatchReceiver =
-                        if (!ownerFunction.isMethodOfAny() || baseDispatchReceiver?.type?.classOrNull?.owner?.isInterface != true) {
+                        if (!resolvedFirSymbol.isFunctionFromAny() || baseDispatchReceiver?.type?.classOrNull?.owner?.isInterface != true) {
                             baseDispatchReceiver
                         } else {
                             // NB: for FE 1.0, this type cast is added by InterfaceObjectCallsLowering
@@ -1134,7 +1139,8 @@ class CallAndReferenceGenerator(
                             )
                         }
                 }
-                if (ownerFunction?.extensionReceiverParameter != null) {
+                // constructors don't have extension receiver but may have receiver parameter in case of inner classes
+                if (resolvedFirSymbol?.receiverParameter != null && resolvedFirSymbol !is FirConstructorSymbol) {
                     extensionReceiver = qualifiedAccess.findIrExtensionReceiver(explicitReceiverExpression)?.let {
                         val symbol = qualifiedAccess.calleeReference.toResolvedCallableSymbol()
                             ?: error("Symbol for call ${qualifiedAccess.render()} not found")
@@ -1159,6 +1165,11 @@ class CallAndReferenceGenerator(
             }
         }
         return this
+    }
+
+    private fun FirCallableSymbol<*>.isFunctionFromAny(): Boolean {
+        if (this !is FirNamedFunctionSymbol) return false
+        return isMethodOfAny
     }
 
     private fun generateErrorCallExpression(

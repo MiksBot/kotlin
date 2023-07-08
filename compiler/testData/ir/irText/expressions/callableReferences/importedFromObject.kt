@@ -1,8 +1,5 @@
 // FIR_IDENTICAL
 
-// MUTE_SIGNATURE_COMPARISON_K2: ANY
-// ^ KT-57433
-
 package test
 
 import test.Foo.a

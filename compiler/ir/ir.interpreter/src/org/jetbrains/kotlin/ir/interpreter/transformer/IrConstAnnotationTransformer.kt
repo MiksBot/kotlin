@@ -6,6 +6,7 @@
 package org.jetbrains.kotlin.ir.interpreter.transformer
 
 import org.jetbrains.kotlin.constant.EvaluatedConstTracker
+import org.jetbrains.kotlin.incremental.components.InlineConstTracker
 import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.declarations.IrAnnotationContainer
 import org.jetbrains.kotlin.ir.declarations.IrFile
@@ -25,10 +26,13 @@ internal abstract class IrConstAnnotationTransformer(
     mode: EvaluationMode,
     checker: IrInterpreterChecker,
     evaluatedConstTracker: EvaluatedConstTracker?,
+    inlineConstTracker: InlineConstTracker?,
     onWarning: (IrFile, IrElement, IrErrorExpression) -> Unit,
     onError: (IrFile, IrElement, IrErrorExpression) -> Unit,
     suppressExceptions: Boolean,
-) : IrConstTransformer(interpreter, irFile, mode, checker, evaluatedConstTracker, onWarning, onError, suppressExceptions) {
+) : IrConstTransformer(
+    interpreter, irFile, mode, checker, evaluatedConstTracker, inlineConstTracker, onWarning, onError, suppressExceptions
+) {
     protected fun transformAnnotations(annotationContainer: IrAnnotationContainer) {
         annotationContainer.annotations.forEach { annotation ->
             transformAnnotation(annotation)
@@ -63,7 +67,7 @@ internal abstract class IrConstAnnotationTransformer(
     }
 
     private fun IrExpression.transformSingleArg(expectedType: IrType): IrExpression {
-        if (this.canBeInterpreted(configuration = interpreter.environment.configuration.copy(treatFloatInSpecialWay = false))) {
+        if (this.canBeInterpreted()) {
             return this.interpret(failAsError = true).convertToConstIfPossible(expectedType)
         } else if (this is IrConstructorCall) {
             transformAnnotation(this)

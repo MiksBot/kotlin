@@ -1,5 +1,5 @@
 // !LANGUAGE: +MultiPlatformProjects
-// IGNORE_BACKEND_K1: JVM, JVM_IR, JS, JS_IR, JS_IR_ES6, NATIVE
+// IGNORE_BACKEND_K1: JVM, JVM_IR, JS, JS_IR, JS_IR_ES6, NATIVE, WASM
 
 // MODULE: common
 // FILE: common.kt
@@ -19,15 +19,17 @@ actual interface I {
     actual fun test(source: String = "actual")
 }
 
-actual interface J : I {
+actual interface J : I
+
+interface K : J {
     override fun test(source: String) {
         if (source != "actual") throw AssertionError(source)
     }
 }
 
-class K : J
+class L : K
 
 fun box(): String {
-    K().test()
+    L().test()
     return "OK"
 }

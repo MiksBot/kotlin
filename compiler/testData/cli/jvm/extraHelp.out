@@ -103,7 +103,8 @@ where advanced options include:
                                * ignore
                                * strict
                                * warn (report a warning)
-  -Xuse-old-innerclasses-logic Use old logic for generation of InnerClasses attributes
+  -Xuse-old-innerclasses-logic Use old logic for generation of InnerClasses attributes.
+                             This option is deprecated and will be deleted in future versions.
   -Xprofile=<profilerPath:command:outputDir>
                              Debug option: Run compiler with async profiler and save snapshots to `outputDir`; `command` is passed to async-profiler on start.
                              `profilerPath` is a path to libasyncProfiler.so; async-profiler.jar should be on the compiler classpath.
@@ -141,8 +142,8 @@ where advanced options include:
                              including freshly supported reading of the type use annotations from class files.
                              See KT-45671 for more details
   -Xuse-fast-jar-file-system Use fast implementation on Jar FS. This may speed up compilation time, but currently it's an experimental mode
-  -Xuse-ir                   Use the IR backend. This option has no effect unless the language version less than 1.5 is used
   -Xuse-javac                Use javac for Java source and class files analysis
+  -Xuse-kapt4                Enable the experimental KAPT 4.
   -Xuse-old-backend          Use the old JVM backend
   -Xuse-old-class-files-reading Use old class files reading implementation. This may slow down the build and cause problems with Groovy interop.
                              Should be used in case of problems with the new implementation
@@ -226,7 +227,7 @@ where advanced options include:
                              Eliminate builder inference restrictions like allowance of returning type variables of a builder inference call
   -Xuse-fir-extended-checkers Use extended analysis mode based on Front-end IR. Warning: this feature is far from being production-ready
   -Xuse-fir-ic               Compile using Front-end IR internal incremental compilation cycle. Warning: this feature is far from being production-ready
-  -Xuse-fir-lt               Compile using LightTree parser with Front-end IR. Warning: this feature is far from being production-ready
+  -Xuse-fir-lt               Compile using LightTree parser with Front-end IR
   -Xuse-k2                   Compile using experimental K2. K2 is a new compiler pipeline, no compatibility guarantees are yet provided
   -Xuse-mixed-named-arguments Enable Support named arguments in their own position even if the result appears as mixed
   -Xverbose-phases           Be verbose while performing these backend phases

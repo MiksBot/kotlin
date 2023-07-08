@@ -25,10 +25,10 @@ import org.jetbrains.kotlin.fir.resolve.transformers.contracts.runContractResolv
 import org.jetbrains.kotlin.fir.scopes.FakeOverrideTypeCalculator
 import org.jetbrains.kotlin.fir.scopes.fakeOverrideSubstitution
 import org.jetbrains.kotlin.fir.delegatedWrapperData
+import org.jetbrains.kotlin.fir.scopes.impl.originalForWrappedIntegerOperator
 import org.jetbrains.kotlin.fir.symbols.impl.FirCallableSymbol
 import org.jetbrains.kotlin.fir.symbols.impl.FirSyntheticPropertySymbol
 import org.jetbrains.kotlin.fir.symbols.lazyResolveToPhase
-import org.jetbrains.kotlin.fir.types.FirErrorTypeRef
 import org.jetbrains.kotlin.fir.types.FirImplicitTypeRef
 import org.jetbrains.kotlin.fir.types.FirResolvedTypeRef
 import org.jetbrains.kotlin.fir.types.builder.buildErrorTypeRef
@@ -70,7 +70,7 @@ fun <F : FirClassLikeDeclaration> F.runContractAndBodiesResolutionForLocalClass(
     components: FirAbstractBodyResolveTransformer.BodyResolveTransformerComponents,
     resolutionMode: ResolutionMode,
     localClassesNavigationInfo: LocalClassesNavigationInfo,
-    firTowerDataContextCollector: FirTowerDataContextCollector? = null
+    firResolveContextCollector: FirResolveContextCollector? = null
 ): F {
     val currentReturnTypeCalculator = components.context.returnTypeCalculator as? ReturnTypeCalculatorWithJump
     val prevDesignation = currentReturnTypeCalculator?.designationMapForLocalClasses ?: emptyMap()
@@ -102,7 +102,7 @@ fun <F : FirClassLikeDeclaration> F.runContractAndBodiesResolutionForLocalClass(
         implicitTypeOnly = false,
         returnTypeCalculator,
         outerBodyResolveContext = newContext,
-        firTowerDataContextCollector = firTowerDataContextCollector
+        firResolveContextCollector = firResolveContextCollector
     )
     return this.transform(transformer, resolutionMode)
 }
@@ -115,7 +115,7 @@ open class FirImplicitAwareBodyResolveTransformer(
     implicitTypeOnly: Boolean,
     returnTypeCalculator: ReturnTypeCalculator,
     outerBodyResolveContext: BodyResolveContext? = null,
-    firTowerDataContextCollector: FirTowerDataContextCollector? = null,
+    firResolveContextCollector: FirResolveContextCollector? = null,
 ) : FirBodyResolveTransformer(
     session,
     phase,
@@ -123,7 +123,7 @@ open class FirImplicitAwareBodyResolveTransformer(
     scopeSession,
     returnTypeCalculator,
     outerBodyResolveContext,
-    firTowerDataContextCollector
+    firResolveContextCollector
 ) {
     override fun transformSimpleFunction(
         simpleFunction: FirSimpleFunction,
@@ -200,6 +200,14 @@ open class ReturnTypeCalculatorWithJump(
                     diagnostic = ConeSimpleDiagnostic("Unsupported: implicit VP type")
                 }
             )
+        }
+
+        if (declaration is FirSimpleFunction) {
+            // Effectively this logic is redundant now, because all methods of Int have an explicit return type,
+            // so explicit call here just to be sure (probably some method from Int will have an implicit type)
+            declaration.originalForWrappedIntegerOperator?.let {
+                tryCalculateReturnTypeOrNull(it.fir)
+            }
         }
 
         resolvedToContractsIfNecessary(declaration)

@@ -19,8 +19,9 @@ import org.jetbrains.kotlin.descriptors.annotations.AnnotationUseSiteTarget
 import org.jetbrains.kotlin.light.classes.symbol.*
 import org.jetbrains.kotlin.light.classes.symbol.annotations.*
 import org.jetbrains.kotlin.light.classes.symbol.classes.SymbolLightClassBase
-import org.jetbrains.kotlin.light.classes.symbol.modifierLists.InitializedModifiersBox
+import org.jetbrains.kotlin.light.classes.symbol.modifierLists.GranularModifiersBox
 import org.jetbrains.kotlin.light.classes.symbol.modifierLists.SymbolLightMemberModifierList
+import org.jetbrains.kotlin.light.classes.symbol.parameters.SymbolLightParameterForReceiver
 import org.jetbrains.kotlin.light.classes.symbol.parameters.SymbolLightParameterList
 import org.jetbrains.kotlin.light.classes.symbol.parameters.SymbolLightTypeParameterList
 import org.jetbrains.kotlin.load.java.JvmAbi
@@ -81,7 +82,15 @@ internal class SymbolLightAnnotationsMethod private constructor(
         return@lazyPub containingPropertySymbolPointer.withSymbol(ktModule) { propertySymbol ->
             SymbolLightMemberModifierList(
                 containingDeclaration = this@SymbolLightAnnotationsMethod,
-                modifiersBox = InitializedModifiersBox(PsiModifier.PUBLIC, PsiModifier.STATIC),
+                modifiersBox = GranularModifiersBox(mapOf(PsiModifier.STATIC to true)) { modifier ->
+                    when (modifier) {
+                        in GranularModifiersBox.VISIBILITY_MODIFIERS -> GranularModifiersBox.computeVisibilityForMember(
+                            ktModule,
+                            containingPropertySymbolPointer,
+                        )
+                        else -> null
+                    }
+                },
                 annotationsBox = GranularAnnotationsBox(
                     annotationsProvider = SymbolAnnotationsProvider(
                         ktModule = ktModule,
@@ -115,9 +124,15 @@ internal class SymbolLightAnnotationsMethod private constructor(
     }
 
     override fun hashCode(): Int = containingPropertyDeclaration.hashCode()
+    override fun hasTypeParameters(): Boolean = false
+    override fun getTypeParameterList(): PsiTypeParameterList? = null
+    override fun getTypeParameters(): Array<PsiTypeParameter> = PsiTypeParameter.EMPTY_ARRAY
 
-    private val _typeParameterList: PsiTypeParameterList? by lazyPub {
-        hasTypeParameters().ifTrue {
+    internal fun getPropertyTypeParameters(): Array<PsiTypeParameter> =
+        _propertyTypeParameterList?.typeParameters ?: PsiTypeParameter.EMPTY_ARRAY
+
+    private val _propertyTypeParameterList: PsiTypeParameterList? by lazyPub {
+        propertyHasTypeParameters().ifTrue {
             SymbolLightTypeParameterList(
                 owner = this,
                 symbolWithTypeParameterPointer = containingPropertySymbolPointer,
@@ -127,15 +142,17 @@ internal class SymbolLightAnnotationsMethod private constructor(
         }
     }
 
-    override fun hasTypeParameters(): Boolean = hasTypeParameters(ktModule, containingPropertyDeclaration, containingPropertySymbolPointer)
-    override fun getTypeParameterList(): PsiTypeParameterList? = _typeParameterList
-    override fun getTypeParameters(): Array<PsiTypeParameter> = _typeParameterList?.typeParameters ?: PsiTypeParameter.EMPTY_ARRAY
+    private fun propertyHasTypeParameters(): Boolean = hasTypeParameters(ktModule, containingPropertyDeclaration, containingPropertySymbolPointer)
 
     private val _parametersList by lazyPub {
         SymbolLightParameterList(
             parent = this@SymbolLightAnnotationsMethod,
-            callableWithReceiverSymbolPointer = containingPropertySymbolPointer,
-            parameterPopulator = {},
+            parameterPopulator = { builder ->
+                SymbolLightParameterForReceiver.tryGet(
+                    callableSymbolPointer = containingPropertySymbolPointer,
+                    method = this@SymbolLightAnnotationsMethod
+                )?.let(builder::addParameter)
+            },
         )
     }
 

@@ -24,16 +24,17 @@ import org.jetbrains.kotlin.ir.linkage.partial.PartialLinkageCase.*
 import org.jetbrains.kotlin.ir.overrides.isEffectivelyPrivate
 import org.jetbrains.kotlin.ir.symbols.*
 import org.jetbrains.kotlin.ir.symbols.impl.IrAnonymousInitializerSymbolImpl
-import org.jetbrains.kotlin.ir.types.IrSimpleType
-import org.jetbrains.kotlin.ir.types.IrType
-import org.jetbrains.kotlin.ir.types.isSubtypeOfClass
+import org.jetbrains.kotlin.ir.types.*
 import org.jetbrains.kotlin.ir.util.*
 import org.jetbrains.kotlin.ir.visitors.IrElementTransformerVoid
 import org.jetbrains.kotlin.ir.visitors.IrElementVisitorVoid
 import org.jetbrains.kotlin.ir.visitors.acceptChildrenVoid
 import org.jetbrains.kotlin.ir.visitors.transformChildrenVoid
+import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.utils.addIfNotNull
+import org.jetbrains.kotlin.utils.addToStdlib.ifTrue
 import org.jetbrains.kotlin.utils.compact
+import org.jetbrains.kotlin.utils.newHashSetWithExpectedSize
 import java.util.*
 import kotlin.properties.Delegates
 import org.jetbrains.kotlin.ir.linkage.partial.PartialLinkageUtils.File as PLFile
@@ -43,8 +44,7 @@ internal class PartiallyLinkedIrTreePatcher(
     private val builtIns: IrBuiltIns,
     private val classifierExplorer: ClassifierExplorer,
     private val stubGenerator: MissingDeclarationStubGenerator,
-    logLevel: PartialLinkageLogLevel,
-    private val messageLogger: IrMessageLogger
+    logger: PartialLinkageLogger
 ) {
     // Avoid revisiting roots that already have been visited.
     private val visitedModuleFragments = hashSetOf<IrModuleFragment>()
@@ -56,7 +56,7 @@ internal class PartiallyLinkedIrTreePatcher(
     private val IrModuleFragment.shouldBeSkipped: Boolean get() = files.isEmpty() || name.asString() == stdlibModule.name
 
     // Used only to generate IR expressions that throw linkage errors.
-    private val supportForLowerings by lazy { PartialLinkageSupportForLoweringsImpl(builtIns, logLevel, messageLogger) }
+    private val supportForLowerings by lazy { PartialLinkageSupportForLoweringsImpl(builtIns, logger) }
 
     fun shouldBeSkipped(declaration: IrDeclaration): Boolean = PLModule.determineModuleFor(declaration).shouldBeSkipped
 
@@ -265,6 +265,7 @@ internal class PartiallyLinkedIrTreePatcher(
             // Compute the linkage case.
             val partialLinkageCase = when (declaration.origin) {
                 PartiallyLinkedDeclarationOrigin.UNIMPLEMENTED_ABSTRACT_CALLABLE_MEMBER -> UnimplementedAbstractCallable(declaration)
+                PartiallyLinkedDeclarationOrigin.AMBIGUOUS_NON_OVERRIDDEN_CALLABLE_MEMBER -> AmbiguousNonOverriddenCallable(declaration)
                 PartiallyLinkedDeclarationOrigin.MISSING_DECLARATION -> MissingDeclaration(declaration.symbol)
                 else -> unusableClassifierInSignature?.let { DeclarationWithUnusableClassifier(declaration.symbol, it) }
             }
@@ -479,7 +480,8 @@ internal class PartiallyLinkedIrTreePatcher(
         }
 
         override fun visitTypeOperator(expression: IrTypeOperatorCall) = expression.maybeThrowLinkageError {
-            checkExpressionType(typeOperand)
+            (typeOperand !== type).ifTrue { checkExpressionType(typeOperand) }
+                ?: checkSamConversion()
         }
 
         override fun visitDeclarationReference(expression: IrDeclarationReference) = expression.maybeThrowLinkageError {
@@ -687,7 +689,8 @@ internal class PartiallyLinkedIrTreePatcher(
         }
 
         protected inline fun IrMemberAccessExpression<IrFunctionSymbol>.checkArgumentsAndValueParameters(
-            usedDefaultArgumentsConsumer: (IrExpressionBody) -> Unit = {}
+            checkDefaultArgument: (index: Int, defaultArgumentExpressionBody: IrExpressionBody?) -> Boolean =
+                { _, defaultArgumentExpressionBody -> defaultArgumentExpressionBody != null }
         ): PartialLinkageCase? {
             val function = symbol.owner
 
@@ -794,9 +797,9 @@ internal class PartiallyLinkedIrTreePatcher(
                 val defaultArgumentExpressionBody = functionsToCheckDefaultValues.firstNotNullOfOrNull {
                     it.valueParameters.getOrNull(index)?.defaultValue
                 }
-                defaultArgumentExpressionBody?.let(usedDefaultArgumentsConsumer)
 
-                return@count defaultArgumentExpressionBody != null || function.valueParameters.getOrNull(index)?.isVararg == true
+                return@count checkDefaultArgument(index, defaultArgumentExpressionBody)
+                        || function.valueParameters.getOrNull(index)?.isVararg == true
             }
             val functionValueParameterCount = function.valueParameters.size
 
@@ -807,6 +810,39 @@ internal class PartiallyLinkedIrTreePatcher(
                     functionHasDispatchReceiver,
                     expressionValueArgumentCount,
                     functionValueParameterCount
+                )
+            else
+                null
+        }
+
+        private fun IrTypeOperatorCall.checkSamConversion(): PartialLinkageCase? {
+            if (operator != IrTypeOperator.SAM_CONVERSION) return null
+
+            val funInterface: IrClass = typeOperand.classOrNull?.owner ?: return null
+
+            val abstractFunctionSymbols = newHashSetWithExpectedSize<IrSimpleFunctionSymbol>(funInterface.declarations.size)
+            funInterface.declarations.forEach { member ->
+                when (member) {
+                    is IrSimpleFunction -> {
+                        if (member.modality == Modality.ABSTRACT)
+                            abstractFunctionSymbols += member.symbol
+                    }
+                    is IrProperty -> {
+                        if (member.modality == Modality.ABSTRACT)
+                            return InvalidSamConversion(
+                                expression = this,
+                                abstractFunctionSymbols = emptySet(),
+                                abstractPropertySymbol = member.symbol
+                            )
+                    }
+                }
+            }
+
+            return if (abstractFunctionSymbols.size != 1)
+                InvalidSamConversion(
+                    expression = this,
+                    abstractFunctionSymbols = abstractFunctionSymbols,
+                    abstractPropertySymbol = null
                 )
             else
                 null
@@ -870,9 +906,14 @@ internal class PartiallyLinkedIrTreePatcher(
             } ?: run {
                 val annotationFile by lazy { PLFile.determineFileFor(symbol.owner) }
 
-                checkArgumentsAndValueParameters { defaultArgumentExpressionBody ->
-                    val defaultArgument = defaultArgumentExpressionBody.expression
+                checkArgumentsAndValueParameters { index, defaultArgumentExpressionBody ->
+                    val defaultArgument = defaultArgumentExpressionBody?.expression
                     when {
+                        defaultArgument == null -> {
+                            // A workaround for KT-59030. See also KT-58651.
+                            val valueParameter = symbol.owner.valueParameters.getOrNull(index)
+                            return@checkArgumentsAndValueParameters valueParameter?.hasEqualFqName(REPLACE_WITH_CONSTRUCTOR_EXPRESSION_FIELD_FQN) == true
+                        }
                         defaultArgument is IrConst<*> -> {
                             // Nothing can be unlinked here.
                         }
@@ -894,6 +935,7 @@ internal class PartiallyLinkedIrTreePatcher(
                             }
                         }
                     }
+                    true // Count the current default value as non-missing.
                 }
             }
     }
@@ -1102,5 +1144,7 @@ internal class PartiallyLinkedIrTreePatcher(
             is IrWhen, is IrLoop, is IrTry, is IrSuspensionPoint, is IrSuspendableExpression -> true
             else -> false
         }
+
+        private val REPLACE_WITH_CONSTRUCTOR_EXPRESSION_FIELD_FQN = FqName("kotlin.ReplaceWith.<init>.expression")
     }
 }

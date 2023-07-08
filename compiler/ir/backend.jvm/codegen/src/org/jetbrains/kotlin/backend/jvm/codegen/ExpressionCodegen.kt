@@ -712,7 +712,7 @@ class ExpressionCodegen(
             // Copy-pasted bytecode blocks are not suspension points.
             symbol.owner.isInline ->
                 if (symbol.owner.name.asString() == "suspendCoroutineUninterceptedOrReturn" &&
-                    symbol.owner.getPackageFragment().fqName == FqName("kotlin.coroutines.intrinsics")
+                    symbol.owner.getPackageFragment().packageFqName == FqName("kotlin.coroutines.intrinsics")
                 )
                     SuspensionPointKind.ALWAYS
                 else
@@ -792,6 +792,7 @@ class ExpressionCodegen(
             declaration.markLineNumber(startOffset = true)
             mv.store(index, varType)
         } else if (declaration.isVisibleInLVT) {
+            declaration.markLineNumber(startOffset = true)
             pushDefaultValueOnStack(varType, mv)
             mv.store(index, varType)
         }

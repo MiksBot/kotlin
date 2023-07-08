@@ -24,6 +24,9 @@ object FrontendKinds {
     }
 }
 
+val FrontendKind<*>.isFir: Boolean
+    get() = this == FrontendKinds.FIR
+
 object BackendKinds {
     object ClassicBackend : BackendKind<ClassicBackendInput>("ClassicBackend")
     object IrBackend : BackendKind<IrBackendInput>("IrBackend")
@@ -47,6 +50,7 @@ object ArtifactKinds {
     object Jvm : BinaryKind<BinaryArtifacts.Jvm>("JVM")
     object Js : BinaryKind<BinaryArtifacts.Js>("JS")
     object Native : BinaryKind<BinaryArtifacts.Native>("Native")
+    object Wasm : BinaryKind<BinaryArtifacts.Wasm>("Wasm")
     object KLib : BinaryKind<BinaryArtifacts.KLib>("KLib")
 
     fun fromString(string: String): BinaryKind<*>? {
@@ -54,6 +58,7 @@ object ArtifactKinds {
             "Jvm" -> Jvm
             "Js" -> Js
             "Native" -> Native
+            "Wasm" -> Wasm
             "KLib" -> KLib
             else -> null
         }

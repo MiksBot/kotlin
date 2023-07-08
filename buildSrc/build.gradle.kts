@@ -39,6 +39,10 @@ gradlePlugin {
             id = "jps-compatible"
             implementationClass = "org.jetbrains.kotlin.pill.JpsCompatiblePlugin"
         }
+        register("kotlin-build-publishing") {
+            id = "kotlin-build-publishing"
+            implementationClass = "plugins.KotlinBuildPublishingPlugin"
+        }
     }
 }
 
@@ -94,9 +98,9 @@ dependencies {
     implementation(kotlin("stdlib", embeddedKotlinVersion))
     implementation("org.jetbrains.kotlin:kotlin-build-gradle-plugin:${kotlinBuildProperties.buildGradlePluginVersion}")
     implementation("com.gradle.publish:plugin-publish-plugin:1.0.0")
-    implementation("org.jetbrains.dokka:dokka-gradle-plugin:1.8.10")
+    implementation("org.jetbrains.dokka:dokka-gradle-plugin:1.8.20")
 
-    implementation("org.spdx:spdx-gradle-plugin:0.1.0-dev-5")
+    implementation("org.spdx:spdx-gradle-plugin:0.1.0-dev-7")
 
     implementation("com.jakewharton.dex:dex-member-list:4.1.1")
 
@@ -107,6 +111,8 @@ dependencies {
     implementation("net.sf.proguard:proguard-gradle:6.2.2")
 
     implementation("gradle.plugin.org.jetbrains.gradle.plugin.idea-ext:gradle-idea-ext:1.0.1")
+    implementation("io.ktor:ktor-client-core:${rootProject.extra["versions.ktor-client-core"]}")
+    implementation("io.ktor:ktor-client-cio:${rootProject.extra["versions.ktor-client-cio"]}")
 
     compileOnly("com.gradle:gradle-enterprise-gradle-plugin:3.12.4")
 
@@ -118,7 +124,7 @@ dependencies {
     implementation("org.jetbrains.kotlin:kotlin-stdlib:${project.bootstrapKotlinVersion}")
     implementation("org.jetbrains.kotlin:kotlin-reflect:${project.bootstrapKotlinVersion}")
     implementation("com.google.code.gson:gson:2.8.9") // Workaround for Gradle dependency resolution error
-    implementation("org.jetbrains.kotlinx:kotlinx-metadata-jvm:0.6.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-metadata-jvm:0.6.2")
 }
 
 samWithReceiver {
@@ -129,13 +135,10 @@ fun Project.samWithReceiver(configure: org.jetbrains.kotlin.samWithReceiver.grad
     extensions.configure("samWithReceiver", configure)
 
 tasks.withType<KotlinCompile>().configureEach {
-    kotlinOptions {
-        allWarningsAsErrors = true
-        freeCompilerArgs += listOf(
-            "-opt-in=kotlin.RequiresOptIn",
-            "-Xsuppress-version-warnings",
-            "-opt-in=kotlin.ExperimentalStdlibApi"
-        )
+    compilerOptions {
+        allWarningsAsErrors.set(true)
+        optIn.add("kotlin.ExperimentalStdlibApi")
+        freeCompilerArgs.add("-Xsuppress-version-warnings")
     }
 }
 

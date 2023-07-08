@@ -248,6 +248,18 @@ public class IrJsSteppingTestGenerated extends AbstractIrJsSteppingTest {
     }
 
     @Test
+    @TestMetadata("implicitThis.kt")
+    public void testImplicitThis() throws Exception {
+        runTest("compiler/testData/debug/stepping/implicitThis.kt");
+    }
+
+    @Test
+    @TestMetadata("implicitThisOnInvoke.kt")
+    public void testImplicitThisOnInvoke() throws Exception {
+        runTest("compiler/testData/debug/stepping/implicitThisOnInvoke.kt");
+    }
+
+    @Test
     @TestMetadata("inTheEndOfLambdaArgumentOfInlineCall.kt")
     public void testInTheEndOfLambdaArgumentOfInlineCall() throws Exception {
         runTest("compiler/testData/debug/stepping/inTheEndOfLambdaArgumentOfInlineCall.kt");
@@ -389,12 +401,6 @@ public class IrJsSteppingTestGenerated extends AbstractIrJsSteppingTest {
     @TestMetadata("nestedInline.kt")
     public void testNestedInline() throws Exception {
         runTest("compiler/testData/debug/stepping/nestedInline.kt");
-    }
-
-    @Test
-    @TestMetadata("noLinenumberInInvokeOfSuspendLambda.kt")
-    public void testNoLinenumberInInvokeOfSuspendLambda() throws Exception {
-        runTest("compiler/testData/debug/stepping/noLinenumberInInvokeOfSuspendLambda.kt");
     }
 
     @Test

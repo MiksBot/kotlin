@@ -1,5 +1,4 @@
 import abitestutils.abiTest
-import abitestutils.TestMode.NATIVE_CACHE_STATIC_EVERYWHERE
 
 fun box() = abiTest {
     /**
@@ -18,9 +17,9 @@ fun box() = abiTest {
      * The [adjustForLazyIr] function is used to adjust tested error messages depending on whether lazy IR is used or not.
      */
     fun adjustForLazyIr(declaration: String) =
-        if (testMode == NATIVE_CACHE_STATIC_EVERYWHERE) "Expression" else declaration
+        if (testMode.lazyIr.usedEverywhere) "Expression" else declaration
     fun adjustNoClassFoundForLazyIr(signature: String) =
-        if (testMode == NATIVE_CACHE_STATIC_EVERYWHERE) "Expression uses unlinked class symbol '$signature'" else "No class found for symbol '$signature'"
+        if (testMode.lazyIr.usedEverywhere) "Expression uses unlinked class symbol '$signature'" else "No class found for symbol '$signature'"
 
     expectFailure(linkage("Function 'getClassToEnumFoo' can not be called: ${adjustForLazyIr("Function")} uses unlinked class symbol '/ClassToEnum.Foo'")) { getClassToEnumFoo() }
     expectFailure(linkage("Function 'getClassToEnumFooInline' can not be called: ${adjustForLazyIr("Function")} uses unlinked class symbol '/ClassToEnum.Foo'")) { getClassToEnumFooInline() }
@@ -333,12 +332,29 @@ fun box() = abiTest {
 
     expectFailure(linkage("Function 'component1' can not be called: No function found for symbol '/DataToClass.component1'")) { getSumFromDataClass() }
 
-    expectSuccess { getFunctionalInterfaceToInterface(); "OK" }
-
     expectFailure(linkage("Constructor 'ClassToAbstractClass.<init>' can not be called: Can not instantiate abstract class 'ClassToAbstractClass'")) { instantiationOfAbstractClass() }
 
     expectSuccess { StableEnum.FOO.test }
     expectSuccess { StableEnum.BAR.test }
 
     expectSuccess("01234") { testStableInheritorOfClassThatUsesPrivateTopLevelClass() }
+
+    expectSuccess(1) { getFunctionalInterfaceToInterface(1).answer() }
+    expectSuccess(2) { getFunctionalInterfaceToInterfaceAsObject(2).answer() }
+    expectSuccess(3) { getFunctionalInterfaceToInterfaceAnswer(3) }
+    expectSuccess(4) { getFunctionalInterfaceWith0AbstractFunctions(4).answer() }
+    expectSuccess(5) { getFunctionalInterfaceWith0AbstractFunctionsAsObject(5).answer() }
+    expectSuccess(6) { getFunctionalInterfaceWith0AbstractFunctionsAnswer(6) }
+    expectSuccess(7) { getFunctionalInterfaceWith1AbstractFunction(7).answer() }
+    expectSuccess(8) { getFunctionalInterfaceWith1AbstractFunctionAsObject(8).answer() }
+    expectSuccess(9) { getFunctionalInterfaceWith1AbstractFunctionAnswer(9) }
+    expectFailure(linkage("Single abstract method (SAM) conversion expression can not be evaluated: Fun interface 'FunctionalInterfaceWith2AbstractFunctions' has more than one abstract function: 'answer', 'function1'")) { getFunctionalInterfaceWith2AbstractFunctions(10).answer() }
+    expectSuccess(11) { getFunctionalInterfaceWith2AbstractFunctionsAsObject(11).answer() }
+    expectFailure(linkage("Single abstract method (SAM) conversion expression can not be evaluated: Fun interface 'FunctionalInterfaceWith2AbstractFunctions' has more than one abstract function: 'answer', 'function1'")) { getFunctionalInterfaceWith2AbstractFunctionsAnswer(12) }
+    expectFailure(linkage("Single abstract method (SAM) conversion expression can not be evaluated: Fun interface 'FunctionalInterfaceWith3AbstractFunctions' has more than one abstract function: 'answer', 'function1', 'function2'")) { getFunctionalInterfaceWith3AbstractFunctions(13).answer() }
+    expectSuccess(14) { getFunctionalInterfaceWith3AbstractFunctionsAsObject(14).answer() }
+    expectFailure(linkage("Single abstract method (SAM) conversion expression can not be evaluated: Fun interface 'FunctionalInterfaceWith3AbstractFunctions' has more than one abstract function: 'answer', 'function1', 'function2'")) { getFunctionalInterfaceWith3AbstractFunctionsAnswer(15) }
+    expectFailure(linkage("Single abstract method (SAM) conversion expression can not be evaluated: Fun interface 'FunctionalInterfaceWithAbstractProperty' has abstract property 'property1'")) { getFunctionalInterfaceWithAbstractProperty(16).answer() }
+    expectSuccess(17) { getFunctionalInterfaceWithAbstractPropertyAsObject(17).answer() }
+    expectFailure(linkage("Single abstract method (SAM) conversion expression can not be evaluated: Fun interface 'FunctionalInterfaceWithAbstractProperty' has abstract property 'property1'")) { getFunctionalInterfaceWithAbstractPropertyAnswer(18) }
 }

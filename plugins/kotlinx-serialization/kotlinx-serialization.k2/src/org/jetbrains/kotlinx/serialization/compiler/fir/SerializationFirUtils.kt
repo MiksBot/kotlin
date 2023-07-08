@@ -29,6 +29,8 @@ import org.jetbrains.kotlin.fir.types.*
 import org.jetbrains.kotlin.fir.types.builder.buildResolvedTypeRef
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.platform.isJs
+import org.jetbrains.kotlin.platform.isWasm
+import org.jetbrains.kotlin.platform.konan.isNative
 import org.jetbrains.kotlin.utils.addToStdlib.firstIsInstanceOrNull
 import org.jetbrains.kotlinx.serialization.compiler.fir.services.dependencySerializationInfoProvider
 import org.jetbrains.kotlinx.serialization.compiler.resolve.SerialEntityNames
@@ -146,6 +148,18 @@ internal val FirClassSymbol<*>.shouldHaveGeneratedMethodsInCompanion: Boolean
             || isSealedSerializableInterface
 
 context(FirSession)
+internal val FirClassSymbol<*>.companionNeedsSerializerFactory: Boolean
+    get() {
+        if (!moduleData.platform.run { isNative() || isJs() || isWasm() }) return false
+        if (isSerializableObject) return true
+        if (isSerializableEnum) return true
+        if (isAbstractOrSealedSerializableClass) return true
+        if (isSealedSerializableInterface) return true
+        if (typeParameterSymbols.isEmpty()) return false
+        return true
+    }
+
+context(FirSession)
 internal val FirClassSymbol<*>.isInternalSerializable: Boolean
     get() {
         if (!classKind.isClass) return false
@@ -221,6 +235,11 @@ val ConeKotlinType.isTypeParameter: Boolean
 context(FirSession)
 val ConeKotlinType.isGeneratedSerializableObject: Boolean
     get() = toRegularClassSymbol(this@FirSession)?.let { it.classKind.isObject && it.hasSerializableOrMetaAnnotationWithoutArgs } ?: false
+
+context(FirSession)
+val ConeKotlinType.isAbstractOrSealedOrInterface: Boolean
+    get() = toRegularClassSymbol(this@FirSession)?.let { it.classKind.isInterface || it.rawStatus.modality == Modality.ABSTRACT || it.rawStatus.modality == Modality.SEALED }
+        ?: false
 
 
 context(FirExtension)

@@ -15,7 +15,6 @@ kotlin {
         implementation(kotlin("stdlib-common"))
     }
 
-    iosArm32()
     iosArm64()
     iosX64()
 

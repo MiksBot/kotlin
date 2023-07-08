@@ -48,6 +48,7 @@ import org.jetbrains.kotlin.fir.declarations.FirBackingField
 import org.jetbrains.kotlin.fir.declarations.FirConstructor
 import org.jetbrains.kotlin.fir.declarations.FirFile
 import org.jetbrains.kotlin.fir.declarations.FirScript
+import org.jetbrains.kotlin.fir.declarations.FirCodeFragment
 import org.jetbrains.kotlin.fir.FirPackageDirective
 import org.jetbrains.kotlin.fir.declarations.FirAnonymousFunction
 import org.jetbrains.kotlin.fir.expressions.FirAnonymousFunctionExpression
@@ -105,9 +106,11 @@ import org.jetbrains.kotlin.fir.expressions.FirFunctionCall
 import org.jetbrains.kotlin.fir.expressions.FirIntegerLiteralOperatorCall
 import org.jetbrains.kotlin.fir.expressions.FirImplicitInvokeCall
 import org.jetbrains.kotlin.fir.expressions.FirDelegatedConstructorCall
+import org.jetbrains.kotlin.fir.expressions.FirMultiDelegatedConstructorCall
 import org.jetbrains.kotlin.fir.expressions.FirComponentCall
 import org.jetbrains.kotlin.fir.expressions.FirCallableReferenceAccess
 import org.jetbrains.kotlin.fir.expressions.FirThisReceiverExpression
+import org.jetbrains.kotlin.fir.expressions.FirInaccessibleReceiverExpression
 import org.jetbrains.kotlin.fir.expressions.FirSmartCastExpression
 import org.jetbrains.kotlin.fir.expressions.FirSafeCallExpression
 import org.jetbrains.kotlin.fir.expressions.FirCheckedSafeCallSubject
@@ -330,6 +333,10 @@ abstract class FirVisitorVoid : FirVisitor<Unit, Nothing?>() {
 
     open fun visitScript(script: FirScript) {
         visitElement(script)
+    }
+
+    open fun visitCodeFragment(codeFragment: FirCodeFragment) {
+        visitElement(codeFragment)
     }
 
     open fun visitPackageDirective(packageDirective: FirPackageDirective) {
@@ -560,6 +567,10 @@ abstract class FirVisitorVoid : FirVisitor<Unit, Nothing?>() {
         visitElement(delegatedConstructorCall)
     }
 
+    open fun visitMultiDelegatedConstructorCall(multiDelegatedConstructorCall: FirMultiDelegatedConstructorCall) {
+        visitElement(multiDelegatedConstructorCall)
+    }
+
     open fun visitComponentCall(componentCall: FirComponentCall) {
         visitElement(componentCall)
     }
@@ -570,6 +581,10 @@ abstract class FirVisitorVoid : FirVisitor<Unit, Nothing?>() {
 
     open fun visitThisReceiverExpression(thisReceiverExpression: FirThisReceiverExpression) {
         visitElement(thisReceiverExpression)
+    }
+
+    open fun visitInaccessibleReceiverExpression(inaccessibleReceiverExpression: FirInaccessibleReceiverExpression) {
+        visitElement(inaccessibleReceiverExpression)
     }
 
     open fun visitSmartCastExpression(smartCastExpression: FirSmartCastExpression) {
@@ -932,6 +947,10 @@ abstract class FirVisitorVoid : FirVisitor<Unit, Nothing?>() {
         visitScript(script)
     }
 
+    final override fun visitCodeFragment(codeFragment: FirCodeFragment, data: Nothing?) {
+        visitCodeFragment(codeFragment)
+    }
+
     final override fun visitPackageDirective(packageDirective: FirPackageDirective, data: Nothing?) {
         visitPackageDirective(packageDirective)
     }
@@ -1160,6 +1179,10 @@ abstract class FirVisitorVoid : FirVisitor<Unit, Nothing?>() {
         visitDelegatedConstructorCall(delegatedConstructorCall)
     }
 
+    final override fun visitMultiDelegatedConstructorCall(multiDelegatedConstructorCall: FirMultiDelegatedConstructorCall, data: Nothing?) {
+        visitMultiDelegatedConstructorCall(multiDelegatedConstructorCall)
+    }
+
     final override fun visitComponentCall(componentCall: FirComponentCall, data: Nothing?) {
         visitComponentCall(componentCall)
     }
@@ -1170,6 +1193,10 @@ abstract class FirVisitorVoid : FirVisitor<Unit, Nothing?>() {
 
     final override fun visitThisReceiverExpression(thisReceiverExpression: FirThisReceiverExpression, data: Nothing?) {
         visitThisReceiverExpression(thisReceiverExpression)
+    }
+
+    final override fun visitInaccessibleReceiverExpression(inaccessibleReceiverExpression: FirInaccessibleReceiverExpression, data: Nothing?) {
+        visitInaccessibleReceiverExpression(inaccessibleReceiverExpression)
     }
 
     final override fun visitSmartCastExpression(smartCastExpression: FirSmartCastExpression, data: Nothing?) {
